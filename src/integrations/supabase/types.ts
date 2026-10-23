@@ -14,6 +14,119 @@ export type Database = {
   }
   public: {
     Tables: {
+      institution_audit_logs: {
+        Row: {
+          action: string
+          actor_id: string | null
+          created_at: string
+          details: Json
+          id: string
+          institution_id: string | null
+          target_id: string
+        }
+        Insert: {
+          action: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          institution_id?: string | null
+          target_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string | null
+          created_at?: string
+          details?: Json
+          id?: string
+          institution_id?: string | null
+          target_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "institution_audit_logs_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      institution_memberships: {
+        Row: {
+          active: boolean
+          created_at: string
+          id: string
+          institution_id: string
+          role: Database["public"]["Enums"]["app_role"]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          institution_id: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          id?: string
+          institution_id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "institution_memberships_institution_id_fkey"
+            columns: ["institution_id"]
+            isOneToOne: false
+            referencedRelation: "institutions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "institution_memberships_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      institutions: {
+        Row: {
+          code: string
+          contact_email: string
+          created_at: string
+          id: string
+          name: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          contact_email?: string
+          created_at?: string
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          contact_email?: string
+          created_at?: string
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -61,7 +174,48 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      assign_institution_member: {
+        Args: {
+          _active?: boolean
+          _institution_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: string
+      }
+      can_access_institution: {
+        Args: { _institution_id: string; _manage?: boolean }
+        Returns: boolean
+      }
+      has_institution_membership: {
+        Args: { _institution_id: string }
+        Returns: boolean
+      }
+      institution_member_directory: {
+        Args: { _institution_id: string }
+        Returns: {
+          active: boolean
+          display_name: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }[]
+      }
+      is_platform_admin: { Args: never; Returns: boolean }
+      provision_initial_platform_admin: {
+        Args: { _user_id: string }
+        Returns: undefined
+      }
+      save_institution: {
+        Args: {
+          _code: string
+          _contact_email: string
+          _id?: string
+          _name: string
+          _status?: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       app_role: "super_admin" | "institution_admin" | "teacher" | "student"
