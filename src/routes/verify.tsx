@@ -9,6 +9,8 @@ export const Route = createFileRoute("/verify")({
       { name: "description", content: "Check that a CATECH Learn certificate is genuine using its certificate ID." },
       { property: "og:title", content: "CATECH Certificate Verification" },
       { property: "og:description", content: "Enter a certificate ID to confirm it is verified." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Verify,

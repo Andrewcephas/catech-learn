@@ -8,6 +8,8 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "One platform for schools, colleges and training centres: courses, exams, M-Pesa payments and verified certificates." },
       { property: "og:title", content: "CATECH Learn — Your Tech Partner For Success" },
       { property: "og:description", content: "Multi-institution e-learning with M-Pesa, white-labeling and certificate verification." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Index,
