@@ -8,3 +8,7 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Accounts use a single root AccountProvider subscription and the managed client-only protected layout so session transitions and private pages remain consistent.
+- Private account reads and profile updates use authenticated server functions and owner-scoped RLS; roles and institution assignments are never user-editable.
+- New accounts receive the student role from a database trigger; elevated roles require trusted provisioning rather than signup metadata.
