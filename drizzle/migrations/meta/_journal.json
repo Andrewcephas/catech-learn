@@ -15,6 +15,13 @@
       "when": 1792744317420,
       "tag": "0001_restrict_account_column_privileges",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792747111848,
+      "tag": "0002_institution_foundation",
+      "breakpoints": true
     }
   ]
 }
