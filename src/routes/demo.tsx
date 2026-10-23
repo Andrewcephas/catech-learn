@@ -9,6 +9,8 @@ export const Route = createFileRoute("/demo")({
       { name: "description", content: "Preview the Super Admin, Institution Admin, Teacher and Student dashboards of CATECH Learn." },
       { property: "og:title", content: "CATECH Learn demo dashboards" },
       { property: "og:description", content: "See what every role sees on CATECH Learn." },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: Demo,
