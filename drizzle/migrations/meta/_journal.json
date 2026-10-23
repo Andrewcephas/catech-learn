@@ -8,6 +8,13 @@
       "when": 1792744190038,
       "tag": "0000_account_profiles_and_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1792744317420,
+      "tag": "0001_restrict_account_column_privileges",
+      "breakpoints": true
     }
   ]
 }
