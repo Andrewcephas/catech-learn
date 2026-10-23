@@ -6,6 +6,6 @@
 Email delivery and external social sign-in round trips were not exercised; their methods are enabled.
 
 # System-first branding
-- [ ] Install the supplied CATECH logo and matching favicon.
-- [ ] Remove marketing, sample dashboards, and certificate verification; open the real account system from home.
-- [ ] Verify navigation and account access after removing sample pages.
+- [x] Install the supplied CATECH logo and matching favicon.
+- [x] Remove marketing, sample dashboards, and certificate verification; open the real account system from home.
+- [x] Verify navigation and account access after removing sample pages.

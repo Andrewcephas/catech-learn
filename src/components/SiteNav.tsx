@@ -25,7 +25,7 @@ export function SiteNav() {
     <header className="sticky top-0 z-30 border-b border-border/60 bg-background/85 backdrop-blur">
       <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-5 py-4">
         <Link to="/" aria-label="CATECH Learn home" className="flex items-center gap-3 font-display text-lg font-bold">
-          <img src={logo.url} alt="CATECH Graphics and Solutions" className="h-14 w-32 object-contain" />
+          <span className="relative block h-14 w-28 overflow-hidden"><img src={logo.url} alt="CATECH Graphics and Solutions" className="absolute -top-7 left-0 h-28 w-28 object-contain" /></span>
           <span className="border-l border-border pl-3 text-primary">Learn</span>
         </Link>
         <nav className="flex flex-wrap items-center gap-3 text-sm font-medium sm:gap-5">
