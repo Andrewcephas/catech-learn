@@ -68,20 +68,20 @@
   --font-body: "Manrope", sans-serif;
   --gradient-hero: linear-gradient(135deg, oklch(0.24 0.06 190), oklch(0.32 0.08 170));
   --shadow-card: 0 20px 40px -20px oklch(0.24 0.06 190 / 0.35);
-  --radius: 0.75rem;
-  --background: oklch(0.985 0.008 95);
-  --foreground: oklch(0.22 0.04 200);
+  --radius: 0.5rem;
+  --background: oklch(0.985 0 0);
+  --foreground: oklch(0.22 0 0);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.129 0.042 264.695);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.129 0.042 264.695);
-  --primary: oklch(0.42 0.09 180);
+  --primary: oklch(0.474 0.145 145.7);
   --primary-foreground: oklch(0.984 0.003 247.858);
-  --secondary: oklch(0.94 0.02 170);
+  --secondary: oklch(0.96 0.014 145);
   --secondary-foreground: oklch(0.208 0.042 265.755);
-  --muted: oklch(0.95 0.012 95);
-  --muted-foreground: oklch(0.554 0.046 257.417);
-  --accent: oklch(0.8 0.15 75);
+  --muted: oklch(0.95 0 0);
+  --muted-foreground: oklch(0.50 0 0);
+  --accent: oklch(0.772 0.174 64.6);
   --accent-foreground: oklch(0.22 0.04 200);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.984 0.003 247.858);
@@ -148,7 +148,7 @@
     color: var(--color-foreground);
     font-family: var(--font-body);
   }
-  h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: -0.02em; }
+  h1, h2, h3, h4 { font-family: var(--font-display); letter-spacing: 0; }
 }
 
 @utility bg-hero { background-image: var(--gradient-hero); }
