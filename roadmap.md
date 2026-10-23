@@ -9,3 +9,13 @@ Email delivery and external social sign-in round trips were not exercised; their
 - [x] Install the supplied CATECH logo and matching favicon.
 - [x] Remove marketing, sample dashboards, and certificate verification; open the real account system from home.
 - [x] Verify navigation and account access after removing sample pages.
+
+# Complete system brief
+- [ ] Finish institution foundation: trusted Super Admin setup, institution management, memberships, and tenant-isolation checks.
+- [ ] Add real course management, teacher/student assignments, enrollment, materials, and learning progress.
+- [ ] Add assessments, submissions, grading, and released results.
+- [ ] Add subscription billing and verified M-Pesa payments after payment credentials and provider setup are available.
+- [ ] Add attendance, live-class scheduling, announcements, and messaging.
+- [ ] Complete reporting, security checks, and production readiness.
+
+Retain the user's explicit exclusions: no demos, marketing homepage, or certificate verification.
