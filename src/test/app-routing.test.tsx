@@ -14,8 +14,13 @@ describe("App routing", () => {
 
     expect(matches.at(-1)?.routeId).not.toBe(rootRouteId);
   });
-  it.each(['/demo', '/verify'])('does not expose the removed system surface %s', (path) => {
+  it("does not expose the removed demo surface /demo", () => {
     const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
-    expect(router.matchRoutes(path).at(-1)?.routeId).toBe(rootRouteId);
+    expect(router.matchRoutes("/demo").at(-1)?.routeId).toBe(rootRouteId);
+  });
+
+  it("exposes the authentic /verify route for QR certificate verification", () => {
+    const router = createRouter({ routeTree, context: { queryClient: new QueryClient() } });
+    expect(router.matchRoutes("/verify").at(-1)?.routeId).not.toBe(rootRouteId);
   });
 });
