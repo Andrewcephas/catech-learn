@@ -5,7 +5,7 @@ import { LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAccount } from "@/components/AccountProvider";
 import { supabase } from "@/integrations/supabase/client";
-import logo from "@/assets/catech-logo.png.asset.json";
+import logoImg from "@/assets/logo-catech.png";
 
 export function SiteNav() {
   const { user, loading } = useAccount();
@@ -36,9 +36,9 @@ export function SiteNav() {
         >
           <span className="relative block h-14 w-28 overflow-hidden">
             <img
-              src={logo.url}
-              alt="CATECH Graphics and Solutions"
-              className="absolute -top-7 left-0 h-28 w-28 object-contain"
+              src={logoImg}
+              alt="CATECH"
+              className="h-8 w-8 object-contain"
             />
           </span>
           <span className="border-l border-border pl-3 text-primary">Learn</span>

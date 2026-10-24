@@ -6,10 +6,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { listCourses } from "@/lib/course.functions";
 import { CourseBuilderModal } from "@/components/dashboard/CourseBuilderModal";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
 
 interface TeacherWorkspaceProps {
   displayName: string;
-  institutionId?: string;
+  institutionId?: string | undefined;
 }
 
 export function TeacherWorkspace({ displayName, institutionId }: TeacherWorkspaceProps) {
@@ -38,13 +39,15 @@ export function TeacherWorkspace({ displayName, institutionId }: TeacherWorkspac
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button
-            onClick={() => setBuilderOpen(true)}
-            className="bg-primary text-primary-foreground hover:bg-primary/90"
-          >
-            <Plus className="h-4 w-4 mr-1.5" />
-            Create Course Module
-          </Button>
+          <PermissionGate require="courses.create">
+            <Button
+              onClick={() => setBuilderOpen(true)}
+              className="bg-primary text-primary-foreground hover:bg-primary/90"
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              Create Course Module
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
@@ -124,9 +127,11 @@ export function TeacherWorkspace({ displayName, institutionId }: TeacherWorkspac
                 Launch the curriculum builder to establish your courses, syllabus, and video
                 lectures.
               </p>
-              <Button onClick={() => setBuilderOpen(true)} size="sm" className="mt-5">
-                <Plus className="h-4 w-4 mr-1.5" /> Launch Course Curriculum Builder
-              </Button>
+              <PermissionGate require="courses.create">
+                <Button onClick={() => setBuilderOpen(true)} size="sm" className="mt-5">
+                  <Plus className="h-4 w-4 mr-1.5" /> Launch Course Curriculum Builder
+                </Button>
+              </PermissionGate>
             </div>
           ) : (
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

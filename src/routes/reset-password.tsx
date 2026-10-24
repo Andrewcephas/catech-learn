@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAccount } from "@/components/AccountProvider";
 import { SiteNav, SiteFooter } from "@/components/SiteNav";
 import { Button } from "@/components/ui/button";
+import { Eye, EyeOff } from "lucide-react";
 
 export const Route = createFileRoute("/reset-password")({
   head: () => ({
@@ -23,6 +24,8 @@ function ResetPassword() {
   const [linkRecovery, setLinkRecovery] = useState(false);
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
@@ -72,27 +75,49 @@ function ResetPassword() {
           <form onSubmit={submit} className="mt-6 space-y-4">
             <label className="block text-sm font-semibold">
               New password
-              <input
-                required
-                type="password"
-                minLength={8}
-                autoComplete="new-password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="mt-2 w-full rounded-md border border-input bg-card px-4 py-3"
-              />
+              <div className="relative mt-2">
+                <input
+                  required
+                  type={showPassword ? "text" : "password"}
+                  minLength={8}
+                  autoComplete="new-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full rounded-md border border-input bg-card px-4 py-3 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </label>
             <label className="block text-sm font-semibold">
               Confirm password
-              <input
-                required
-                type="password"
-                minLength={8}
-                autoComplete="new-password"
-                value={confirm}
-                onChange={(e) => setConfirm(e.target.value)}
-                className="mt-2 w-full rounded-md border border-input bg-card px-4 py-3"
-              />
+              <div className="relative mt-2">
+                <input
+                  required
+                  type={showConfirmPassword ? "text" : "password"}
+                  minLength={8}
+                  autoComplete="new-password"
+                  value={confirm}
+                  onChange={(e) => setConfirm(e.target.value)}
+                  className="w-full rounded-md border border-input bg-card px-4 py-3 pr-11"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((prev) => !prev)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={showConfirmPassword ? "Hide password" : "Show password"}
+                  tabIndex={-1}
+                >
+                  {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                </button>
+              </div>
             </label>
             {error && (
               <p role="alert" className="text-sm text-destructive">

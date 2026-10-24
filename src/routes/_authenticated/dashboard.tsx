@@ -88,20 +88,40 @@ function Dashboard() {
     setTimeout(() => setCopiedId(false), 2000);
   };
 
-  const hasInstAdmin = data.memberships.some((m) => m.role === "institution_admin");
+  const rbacPerms = ((data as { rbacPermissions?: string[] }).rbacPermissions || []);
+  const rbacRoleCodes = ((data as { rbacRoles?: Array<{ role_code: string }> }).rbacRoles || []).map((r) => r.role_code);
+
+  const hasInstAdmin =
+    data.memberships.some((m) => m.role === "institution_admin") ||
+    rbacRoleCodes.some((code) => ["institution_admin", "institution_owner"].includes(code)) ||
+    rbacPerms.some((p) => ["institutions.view", "institutions.settings.manage", "users.roles.assign"].includes(p));
+
   const hasTeacher =
-    data.roles.includes("teacher") || data.memberships.some((m) => m.role === "teacher");
+    data.roles.includes("teacher") ||
+    data.memberships.some((m) => m.role === "teacher") ||
+    rbacRoleCodes.some((code) => ["teacher", "academic_admin", "department_head"].includes(code)) ||
+    rbacPerms.some((p) => ["courses.create", "courses.update", "courses.content.edit", "assessments.grade"].includes(p));
 
-  // Determine initial active tab
-  const defaultTab = data.isPlatformAdmin
-    ? "platform"
-    : hasInstAdmin
-      ? "campus"
-      : hasTeacher
-        ? "teaching"
-        : "learning";
+  // Determine initial active tab respecting user login selection if allowed
+  const getInitialTab = () => {
+    if (typeof window !== "undefined") {
+      const preferred = localStorage.getItem("catech_active_role");
+      if (preferred === "student") return "learning";
+      if (preferred === "teacher" && (hasTeacher || data.isPlatformAdmin)) return "teaching";
+      if (preferred === "admin" && (data.isPlatformAdmin || hasInstAdmin)) {
+        return data.isPlatformAdmin ? "platform" : "campus";
+      }
+    }
+    return data.isPlatformAdmin
+      ? "platform"
+      : hasInstAdmin
+        ? "campus"
+        : hasTeacher
+          ? "teaching"
+          : "learning";
+  };
 
-  const [activeTab, setActiveTab] = useState(defaultTab);
+  const [activeTab, setActiveTab] = useState(getInitialTab);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

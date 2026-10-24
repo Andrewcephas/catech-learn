@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { LoaderCircle } from "lucide-react";
 import { useAccount } from "@/components/AccountProvider";
-import logo from "@/assets/catech-logo.png.asset.json";
+import logoImg from "@/assets/logo-catech.png";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -30,7 +30,7 @@ function SystemEntry() {
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-4 bg-background">
       <img
-        src={logo.url}
+        src={logoImg}
         alt="CATECH Graphics and Solutions"
         className="h-32 w-64 object-contain"
       />

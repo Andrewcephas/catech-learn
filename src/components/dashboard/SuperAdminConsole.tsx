@@ -37,6 +37,7 @@ import {
   listAuditLogs,
   type InstitutionItem,
 } from "@/lib/institution.functions";
+import { RbacManagementPanel } from "@/components/dashboard/RbacManagementPanel";
 
 export function SuperAdminConsole() {
   const queryClient = useQueryClient();
@@ -405,6 +406,22 @@ export function SuperAdminConsole() {
               </TableBody>
             </Table>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* RBAC Management Panel */}
+      <Card className="border border-border/80 shadow-sm">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg font-bold flex items-center gap-2">
+            <Shield className="h-5 w-5 text-primary" />
+            Role-Based Access Control
+          </CardTitle>
+          <CardDescription>
+            Manage system roles, granular permissions, overrides, and access control audit logs.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <RbacManagementPanel />
         </CardContent>
       </Card>
 

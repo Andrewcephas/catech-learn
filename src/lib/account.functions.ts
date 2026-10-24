@@ -19,10 +19,47 @@ export const getAccount = createServerFn({ method: "GET" })
     const userRoles = (roles.data || []).map((row) => row.role);
     const isPlatformAdmin = userRoles.includes("super_admin");
 
+    // Fetch RBAC assigned roles and effective permissions (non-blocking — graceful if tables don't exist yet)
+    let rbacRoles: Array<{ role_code: string; role_name: string; institution_id: string | null }> = [];
+    let rbacPermissions: string[] = [];
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      const [arResult, permResult] = await Promise.all([
+        supabaseAdmin
+          .from("user_assigned_roles" as never)
+          .select("role_id, institution_id, roles(code, name)")
+          .eq("user_id", context.userId),
+        supabaseAdmin.rpc("get_user_permissions" as never, {
+          _user_id: context.userId,
+          _institution_id: null,
+        } as never),
+      ]);
+      if (!arResult.error && arResult.data) {
+        rbacRoles = (arResult.data as Array<{
+          role_id: string;
+          institution_id: string | null;
+          roles: { code: string; name: string } | null;
+        }>).map((r) => ({
+          role_code: r.roles?.code ?? "",
+          role_name: r.roles?.name ?? "",
+          institution_id: r.institution_id,
+        }));
+      }
+      if (!permResult.error && permResult.data) {
+        rbacPermissions = (permResult.data as Array<{ permission_code: string }>).map(
+          (r) => r.permission_code,
+        );
+      }
+    } catch {
+      // RBAC tables may not be migrated yet — fail silently
+    }
+
     return {
       profile: profile.data,
       roles: userRoles,
       isPlatformAdmin,
+      rbacRoles,
+      rbacPermissions,
       memberships: (memberships.data || []).map((m) => ({
         id: m.id,
         institution_id: m.institution_id,
@@ -37,6 +74,7 @@ export const getAccount = createServerFn({ method: "GET" })
       })),
     };
   });
+
 
 export const saveProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])

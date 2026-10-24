@@ -40,6 +40,7 @@ import {
   scheduleLiveClassFn,
   listAnnouncements,
 } from "@/lib/academic.functions";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
 
 interface CampusAcademicManagerProps {
   institutionId: string;
@@ -185,13 +186,15 @@ export function CampusAcademicManager({ institutionId }: CampusAcademicManagerPr
           {/* Departments Tab */}
           <TabsContent value="departments" className="space-y-4">
             <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setDeptModalOpen(true)}
-                className="bg-primary text-primary-foreground text-xs"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" /> New Department
-              </Button>
+              <PermissionGate require="departments.manage">
+                <Button
+                  size="sm"
+                  onClick={() => setDeptModalOpen(true)}
+                  className="bg-primary text-primary-foreground text-xs"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> New Department
+                </Button>
+              </PermissionGate>
             </div>
             <Table>
               <TableHeader>
@@ -234,13 +237,15 @@ export function CampusAcademicManager({ institutionId }: CampusAcademicManagerPr
           {/* Classes Tab */}
           <TabsContent value="classes" className="space-y-4">
             <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setClassModalOpen(true)}
-                className="bg-primary text-primary-foreground text-xs"
-              >
-                <Plus className="h-3.5 w-3.5 mr-1" /> Add Class Cohort
-              </Button>
+              <PermissionGate require="classes.manage">
+                <Button
+                  size="sm"
+                  onClick={() => setClassModalOpen(true)}
+                  className="bg-primary text-primary-foreground text-xs"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1" /> Add Class Cohort
+                </Button>
+              </PermissionGate>
             </div>
             <Table>
               <TableHeader>
@@ -282,13 +287,15 @@ export function CampusAcademicManager({ institutionId }: CampusAcademicManagerPr
           {/* Live Sessions Tab */}
           <TabsContent value="live" className="space-y-4">
             <div className="flex justify-end">
-              <Button
-                size="sm"
-                onClick={() => setLiveModalOpen(true)}
-                className="bg-primary text-primary-foreground text-xs"
-              >
-                <Video className="h-3.5 w-3.5 mr-1" /> Schedule Live Lecture
-              </Button>
+              <PermissionGate requireAny={["classes.manage", "lessons.create", "courses.update"]}>
+                <Button
+                  size="sm"
+                  onClick={() => setLiveModalOpen(true)}
+                  className="bg-primary text-primary-foreground text-xs"
+                >
+                  <Video className="h-3.5 w-3.5 mr-1" /> Schedule Live Lecture
+                </Button>
+              </PermissionGate>
             </div>
             <Table>
               <TableHeader>

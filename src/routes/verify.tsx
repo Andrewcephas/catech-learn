@@ -17,7 +17,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { SiteNav, SiteFooter } from "@/components/SiteNav";
 import { verifyCertificateFn } from "@/lib/assessment.functions";
-import logo from "@/assets/catech-logo.png.asset.json";
+import logoImg from "@/assets/logo-catech.png";
 
 export const Route = createFileRoute("/verify")({
   head: () => ({
@@ -138,7 +138,7 @@ function CertificateVerificationPage() {
 
                 <div className="flex items-center justify-between border-b border-border/80 pb-6">
                   <div className="flex items-center gap-3">
-                    <img src={logo.url} alt="CATECH" className="h-12 w-auto object-contain" />
+                    <img src={logoImg} alt="CATECH" className="h-12 w-auto object-contain" />
                     <div>
                       <h3 className="font-bold text-sm tracking-wide text-foreground">
                         CATECH LEARN

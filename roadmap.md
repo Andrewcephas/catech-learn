@@ -22,3 +22,15 @@ Email delivery and external social sign-in round trips were not exercised; their
 - [x] Complete reporting, security checks, and production readiness.
 
 Retain the user's explicit exclusions: no demos, marketing homepage, or certificate verification.
+
+# Phase 7 — Role-Based Access Control (RBAC)
+
+- [x] Create comprehensive RBAC database migration (`0004_comprehensive_rbac.sql`) with 12 standard roles, granular permissions, role-permission mappings, custom roles, permission overrides, and audit logging.
+- [x] Build RBAC server functions (`rbac.functions.ts`) — role listing, assignment, revocation, permission overrides, audit log access, and effective-permission resolution via database RPC.
+- [x] Build RBAC Management Panel UI (`RbacManagementPanel.tsx`) — roles tab, permissions accordion, permission override dialogs, and RBAC audit trail display.
+- [x] Integrate RBAC panel into Super Admin Console with role and permission management card.
+- [x] Enhance `getAccount` server function to fetch RBAC assigned roles and effective permissions alongside existing profile data.
+- [x] Create `PermissionGate` component and `usePermissionCheck` helper for client-side UI permission guards.
+- [ ] Apply migration `0004` to production Supabase database.
+- [ ] Wire `PermissionGate` into all existing dashboard components for granular UI access control.
+- [ ] End-to-end testing of RBAC enforcement across all 12 roles.

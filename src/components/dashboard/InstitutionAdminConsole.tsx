@@ -37,6 +37,7 @@ import {
   listAuditLogs,
 } from "@/lib/institution.functions";
 import { CampusAcademicManager } from "@/components/dashboard/CampusAcademicManager";
+import { PermissionGate } from "@/components/rbac/PermissionGate";
 
 interface InstitutionAdminConsoleProps {
   memberships: Array<{
@@ -183,13 +184,15 @@ export function InstitutionAdminConsole({ memberships }: InstitutionAdminConsole
             Refresh
           </Button>
 
-          <Button
-            onClick={() => setAssignModalOpen(true)}
-            className="bg-primary text-primary-foreground"
-          >
-            <UserPlus className="h-4 w-4 mr-1.5" />
-            Assign Member
-          </Button>
+          <PermissionGate requireAny={["users.roles.assign", "users.create", "institutions.settings.manage"]}>
+            <Button
+              onClick={() => setAssignModalOpen(true)}
+              className="bg-primary text-primary-foreground"
+            >
+              <UserPlus className="h-4 w-4 mr-1.5" />
+              Assign Member
+            </Button>
+          </PermissionGate>
         </div>
       </div>
 
