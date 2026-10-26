@@ -39,7 +39,7 @@ import { getCompanyLearnersDirectory, type CompanyLearner } from "@/lib/company.
 import { sendDirectMessageFn, listDirectMessagesFn } from "@/lib/messaging.functions";
 
 interface CompanyLearnersManagerProps {
-  institutionId?: string;
+  institutionId?: string | undefined;
   companyName?: string;
 }
 

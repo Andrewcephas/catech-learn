@@ -24,7 +24,7 @@ interface StkQueryResponse {
 }
 
 function getDarajaBaseUrl(): string {
-  const env = process.env.MPESA_ENVIRONMENT || "sandbox";
+  const env = process.env["MPESA_ENVIRONMENT"] || "sandbox";
   return env === "live" ? "https://api.safaricom.co.ke" : "https://sandbox.safaricom.co.ke";
 }
 
@@ -32,8 +32,8 @@ function getDarajaBaseUrl(): string {
  * Obtain OAuth bearer token from Safaricom Daraja API
  */
 export async function getMpesaAccessToken(): Promise<string> {
-  const consumerKey = process.env.MPESA_CONSUMER_KEY;
-  const consumerSecret = process.env.MPESA_CONSUMER_SECRET;
+  const consumerKey = process.env["MPESA_CONSUMER_KEY"];
+  const consumerSecret = process.env["MPESA_CONSUMER_SECRET"];
 
   if (!consumerKey || !consumerSecret) {
     throw new Error(
@@ -119,10 +119,10 @@ export async function initiateStkPush(params: {
   accountReference: string;
   transactionDesc: string;
 }): Promise<StkPushResponse> {
-  const shortcode = process.env.MPESA_BUSINESS_SHORTCODE || "174379";
-  const passkey = process.env.MPESA_PASSKEY;
+  const shortcode = process.env["MPESA_BUSINESS_SHORTCODE"] || "174379";
+  const passkey = process.env["MPESA_PASSKEY"];
   const callbackUrl =
-    process.env.MPESA_CALLBACK_URL || "https://learn.catech.co.ke/api/payments/mpesa/callback";
+    process.env["MPESA_CALLBACK_URL"] || "https://learn.catech.co.ke/api/payments/mpesa/callback";
 
   if (!passkey) {
     throw new Error("MPESA_PASSKEY is not configured in server environment.");
@@ -173,8 +173,8 @@ export async function initiateStkPush(params: {
  * Query status of an existing STK Push transaction
  */
 export async function queryStkStatus(checkoutRequestId: string): Promise<StkQueryResponse> {
-  const shortcode = process.env.MPESA_BUSINESS_SHORTCODE || "174379";
-  const passkey = process.env.MPESA_PASSKEY;
+  const shortcode = process.env["MPESA_BUSINESS_SHORTCODE"] || "174379";
+  const passkey = process.env["MPESA_PASSKEY"];
 
   if (!passkey) {
     throw new Error("MPESA_PASSKEY is not configured in server environment.");

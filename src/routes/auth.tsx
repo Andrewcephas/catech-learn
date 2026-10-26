@@ -134,11 +134,13 @@ function Auth() {
             const chosen =
               DEFAULT_SEED_COMPANIES.find((c) => c.code === selectedStudentCompanyCode) ||
               DEFAULT_SEED_COMPANIES[0];
-            localStorage.setItem(
-              "catech_selected_company",
-              JSON.stringify({ id: chosen.id, name: chosen.name, code: chosen.code }),
-            );
-            localStorage.setItem("catech_selected_company_id", chosen.id);
+            if (chosen) {
+              localStorage.setItem(
+                "catech_selected_company",
+                JSON.stringify({ id: chosen.id, name: chosen.name, code: chosen.code }),
+              );
+              localStorage.setItem("catech_selected_company_id", chosen.id);
+            }
           }
         }
         await navigate({ to: "/dashboard" });

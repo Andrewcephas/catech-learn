@@ -279,7 +279,7 @@ export function CompanyCourseCatalog({
               void queryClient.invalidateQueries({ queryKey: ["user-payments"] });
             }
           }}
-          onPaymentSuccess={() => {
+          onSuccess={() => {
             void queryClient.invalidateQueries({ queryKey: ["courses"] });
             void queryClient.invalidateQueries({ queryKey: ["user-payments"] });
             onStartLearning(selectedCourseForPayment.id);

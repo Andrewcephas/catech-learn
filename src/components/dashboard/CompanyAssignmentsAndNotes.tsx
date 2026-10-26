@@ -34,7 +34,7 @@ import { listCourses } from "@/lib/course.functions";
 import { submitAssignmentFn, gradeAssignmentFn } from "@/lib/assessment.functions";
 
 interface CompanyAssignmentsAndNotesProps {
-  institutionId?: string;
+  institutionId?: string | undefined;
   isCompanyAdmin?: boolean;
 }
 
@@ -161,7 +161,7 @@ export function CompanyAssignmentsAndNotes({
             <Button
               onClick={() => {
                 if (courses.length > 0 && !selectedCourseId) {
-                  setSelectedCourseId(courses[0].id);
+                  setSelectedCourseId(courses[0]?.id ?? "");
                 }
                 setCreateAssignOpen(true);
               }}

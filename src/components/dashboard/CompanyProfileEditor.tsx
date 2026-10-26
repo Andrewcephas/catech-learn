@@ -22,7 +22,7 @@ import {
 } from "@/lib/company.functions";
 
 interface CompanyProfileEditorProps {
-  institutionId?: string;
+  institutionId?: string | undefined;
   isSuperAdmin?: boolean;
 }
 

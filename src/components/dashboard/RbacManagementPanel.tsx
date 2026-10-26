@@ -43,7 +43,7 @@ import {
 
 interface RbacManagementPanelProps {
   /** Restrict to institution scope. Undefined = platform-level (super admin only). */
-  institutionId?: string;
+  institutionId?: string | undefined;
   /** ID of the user being managed. If undefined, shows the roles/permissions overview. */
   targetUserId?: string;
   /** Display name of the user being managed (for labels). */
@@ -197,7 +197,8 @@ export function RbacManagementPanel({
   const permissionsByCategory = allPermissions.reduce<Record<string, typeof allPermissions>>(
     (acc, p) => {
       if (!acc[p.category]) acc[p.category] = [];
-      acc[p.category].push(p);
+      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+      acc[p.category]!.push(p);
       return acc;
     },
     {},

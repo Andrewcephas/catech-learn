@@ -19,6 +19,7 @@ import {
   CheckCircle2,
   AlertCircle,
   Menu,
+  FileCheck2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -51,6 +52,8 @@ import { SuperAdminConsole } from "@/components/dashboard/SuperAdminConsole";
 import { RbacManagementPanel } from "@/components/dashboard/RbacManagementPanel";
 import { CompanyProfileEditor } from "@/components/dashboard/CompanyProfileEditor";
 import { StudentProfileEditor } from "@/components/dashboard/StudentProfileEditor";
+import { IssueReporter } from "@/components/dashboard/IssueReporter";
+import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { listUserPayments } from "@/lib/payment.functions";
 
 const accountOptions = queryOptions({ queryKey: ["account"], queryFn: () => getAccount() });
@@ -281,6 +284,7 @@ function Dashboard() {
                 {activeView === "my_learning" && "My Enrolled Sessions & Progress"}
                 {activeView === "assignments" && "Coursework, Tasks & Study Notes"}
                 {activeView === "messages" && "Direct 1-on-1 Messages"}
+                {activeView === "my_issues" && "My Support Issues & Tickets"}
                 {activeView === "company_overview" && "Company Overview & Operations"}
                 {activeView === "company_learners" && "Learner Directory & Contacts"}
                 {activeView === "company_courses" && "Course & Curriculum Studio"}
@@ -291,13 +295,16 @@ function Dashboard() {
                 {activeView === "profile" && "Account & Credentials"}
                 {activeView === "company_settings" && "Company & Tenancy Settings"}
                 {activeView === "platform_control" && "Super Admin Platform Control"}
+                {activeView === "platform_issues" && "Platform Issues & Support Tickets"}
                 {activeView === "rbac_management" && "Role-Based Access Control"}
               </h1>
             </div>
           </div>
 
-          {/* Right Header Actions */}
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
+            {/* Notification Bell */}
+            <NotificationBell onNavigate={setActiveView} />
+
             {/* Quick Messages Button */}
             <Button
               variant="outline"
@@ -394,6 +401,9 @@ function Dashboard() {
 
           {/* VIEW: Company Overview */}
           {activeView === "company_overview" && (
+            userRole === "super_admin" ? (
+              <SuperAdminConsole initialTab="companies" />
+            ) : (
             <div className="space-y-8">
               {/* Stats Overview */}
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -514,14 +524,31 @@ function Dashboard() {
                 companyName={selectedCompany?.name || "Your Company"}
               />
             </div>
+            )
+          )}
+
+          {/* VIEW: Learners & Users Directory */}
+          {activeView === "company_learners" && (
+            userRole === "super_admin" ? (
+              <SuperAdminConsole initialTab="users" />
+            ) : (
+              <CompanyLearnersManager
+                institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+                companyName={selectedCompany?.name || "Your Company"}
+              />
+            )
           )}
 
           {/* VIEW: Course Sessions Manager (Company Studio) */}
           {activeView === "company_courses" && (
-            <TeacherWorkspace
-              displayName={data.profile.display_name}
-              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
-            />
+            userRole === "super_admin" ? (
+              <SuperAdminConsole initialTab="courses" />
+            ) : (
+              <TeacherWorkspace
+                displayName={data.profile.display_name}
+                institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+              />
+            )
           )}
 
           {/* VIEW: Live Virtual Classes */}
@@ -533,6 +560,9 @@ function Dashboard() {
 
           {/* VIEW: Payments / Receipts Table */}
           {(activeView === "payments" || activeView === "company_payments") && (
+            userRole === "super_admin" ? (
+              <SuperAdminConsole initialTab="payments" />
+            ) : (
             <div className="space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/70 pb-5">
                 <div>
@@ -603,6 +633,7 @@ function Dashboard() {
                 </div>
               )}
             </div>
+            )
           )}
 
           {/* VIEW: Company Settings / Profile */}
@@ -674,9 +705,19 @@ function Dashboard() {
             </div>
           )}
 
+          {/* VIEW: Student Support Issues */}
+          {activeView === "my_issues" && (
+            <IssueReporter institutionId={selectedCompany?.id} />
+          )}
+
+          {/* VIEW: Super Admin Platform Issues */}
+          {activeView === "platform_issues" && (
+            <SuperAdminConsole initialTab="issues" />
+          )}
+
           {/* VIEW: Platform Control */}
           {activeView === "platform_control" && (
-            <SuperAdminConsole />
+            <SuperAdminConsole initialTab="overview" />
           )}
 
           {/* VIEW: RBAC Management */}

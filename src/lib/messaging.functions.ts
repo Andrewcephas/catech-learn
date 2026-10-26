@@ -61,13 +61,13 @@ export const sendDirectMessageFn = createServerFn({ method: "POST" })
     }
 
     // 3. Insert notification for recipient so it's always received
-    await context.supabase.from("notifications").insert({
+    await context.supabase.from("notifications" as never).insert({
       user_id: data.recipient_id,
       title: `Message from ${senderName}: ${data.subject || "Academic Update"}`,
       message: data.message,
       link: "/dashboard?tab=messages",
       is_read: false,
-    });
+    } as never);
 
     return {
       success: true,
@@ -138,22 +138,23 @@ export const listDirectMessagesFn = createServerFn({ method: "GET" })
 
     // Fallback: Read from notifications sent to current user
     const { data: notifs } = await context.supabase
-      .from("notifications")
+      .from("notifications" as never)
       .select("id, user_id, title, message, is_read, created_at")
       .eq("user_id", context.userId)
       .order("created_at", { ascending: false });
 
-    return (notifs || []).map((n) => ({
-      id: n.id,
+    const notifRows = (notifs || []) as unknown as Array<Record<string, unknown>>;
+    return notifRows.map((n) => ({
+      id: n["id"] as string,
       sender_id: "system-sender",
-      sender_name: n.title.split(":")[0] || "Company Instructor",
+      sender_name: (n["title"] as string)?.split(":")[0] || "Company Instructor",
       recipient_id: context.userId,
       recipient_name: "You",
       institution_id: null,
-      subject: n.title,
-      message: n.message,
-      is_read: n.is_read,
-      created_at: n.created_at,
+      subject: (n["title"] as string) || "System Notification",
+      message: (n["message"] as string) || "",
+      is_read: Boolean(n["is_read"]),
+      created_at: (n["created_at"] as string) || new Date().toISOString(),
     }));
   });
 
@@ -171,8 +172,8 @@ export const markDirectMessageReadFn = createServerFn({ method: "POST" })
     } catch {
       // Fallback to notifications
       await context.supabase
-        .from("notifications")
-        .update({ is_read: true })
+        .from("notifications" as never)
+        .update({ is_read: true } as never)
         .eq("id", data.message_id)
         .eq("user_id", context.userId);
     }

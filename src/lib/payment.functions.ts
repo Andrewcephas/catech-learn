@@ -12,7 +12,7 @@ export interface PaymentRecord {
   phone_number: string;
   mpesa_receipt_number: string | null;
   created_at: string;
-  course_title?: string;
+  course_title?: string | undefined;
 }
 
 const initiatePaymentSchema = z.object({
@@ -26,13 +26,22 @@ export const initiateCoursePaymentFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     // 1. Fetch course details
     const { data: course, error: courseErr } = await context.supabase
-      .from("courses")
+      .from("courses" as never)
       .select("id, institution_id, title, code, price, currency")
       .eq("id", data.course_id)
       .single();
 
-    if (courseErr || !course) throw new Error("Course not found");
-    const amount = Number(course.price);
+    const courseRow = course as unknown as {
+      id: string;
+      institution_id: string;
+      title: string;
+      code: string;
+      price: number | string;
+      currency: string;
+    } | null;
+
+    if (courseErr || !courseRow) throw new Error("Course not found");
+    const amount = Number(courseRow.price);
     if (amount <= 0) throw new Error("Free courses do not require payment.");
 
     // 2. Call Safaricom Daraja STK Push server module
@@ -40,25 +49,25 @@ export const initiateCoursePaymentFn = createServerFn({ method: "POST" })
     const stkResponse = await initiateStkPush({
       phoneNumber: data.phone_number,
       amount,
-      accountReference: course.code.slice(0, 12),
-      transactionDesc: `Enrollment in ${course.title.slice(0, 30)}`,
+      accountReference: courseRow.code.slice(0, 12),
+      transactionDesc: `Enrollment in ${courseRow.title.slice(0, 30)}`,
     });
 
     // 3. Persist pending transaction
     const { data: payment, error: payErr } = await context.supabase
-      .from("payments")
+      .from("payments" as never)
       .insert({
-        institution_id: course.institution_id,
+        institution_id: courseRow.institution_id,
         user_id: context.userId,
-        course_id: course.id,
+        course_id: courseRow.id,
         amount,
-        currency: course.currency || "KES",
+        currency: courseRow.currency || "KES",
         payment_method: "mpesa",
         status: "pending",
         checkout_request_id: stkResponse.CheckoutRequestID,
         merchant_request_id: stkResponse.MerchantRequestID,
         phone_number: data.phone_number,
-      })
+      } as never)
       .select("id, checkout_request_id")
       .single();
 
@@ -66,11 +75,12 @@ export const initiateCoursePaymentFn = createServerFn({ method: "POST" })
       console.error("Failed to persist payment:", payErr);
     }
 
+    const paymentRecord = payment as { id?: string } | null;
     return {
       success: true,
       checkoutRequestId: stkResponse.CheckoutRequestID,
       customerMessage: stkResponse.CustomerMessage,
-      paymentId: payment?.id,
+      paymentId: paymentRecord?.id,
     };
   });
 
@@ -82,13 +92,14 @@ export const verifyPaymentAndEnrollFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }) => {
     // 1. Find payment record
     const { data: payment, error } = await context.supabase
-      .from("payments")
+      .from("payments" as never)
       .select("*")
       .eq("checkout_request_id", data.checkout_request_id)
       .maybeSingle();
 
     if (error || !payment) throw new Error("Payment record not found");
-    if (payment.status === "completed") {
+    const paymentRow = payment as unknown as Record<string, unknown>;
+    if (paymentRow["status"] === "completed") {
       return { completed: true, message: "Payment already verified and course unlocked." };
     }
 
@@ -100,24 +111,24 @@ export const verifyPaymentAndEnrollFn = createServerFn({ method: "POST" })
       if (queryResult.ResultCode === "0") {
         // Success: Update payment and create enrollment
         await context.supabase
-          .from("payments")
+          .from("payments" as never)
           .update({
             status: "completed",
             result_code: 0,
             result_desc: queryResult.ResultDesc,
             updated_at: new Date().toISOString(),
-          })
-          .eq("id", payment.id);
+          } as never)
+          .eq("id", paymentRow["id"] as string);
 
-        if (payment.course_id) {
-          await context.supabase.from("enrollments").upsert(
+        if (paymentRow["course_id"]) {
+          await context.supabase.from("enrollments" as never).upsert(
             {
-              course_id: payment.course_id,
-              user_id: payment.user_id,
+              course_id: paymentRow["course_id"],
+              user_id: paymentRow["user_id"],
               status: "active",
-              payment_id: payment.id,
+              payment_id: paymentRow["id"],
               enrolled_at: new Date().toISOString(),
-            },
+            } as never,
             { onConflict: "course_id,user_id" },
           );
         }
@@ -125,9 +136,9 @@ export const verifyPaymentAndEnrollFn = createServerFn({ method: "POST" })
         return { completed: true, message: "Payment confirmed! You are now enrolled." };
       } else if (queryResult.ResultCode === "1032") {
         await context.supabase
-          .from("payments")
-          .update({ status: "cancelled", result_code: 1032, result_desc: queryResult.ResultDesc })
-          .eq("id", payment.id);
+          .from("payments" as never)
+          .update({ status: "cancelled", result_code: 1032, result_desc: queryResult.ResultDesc } as never)
+          .eq("id", paymentRow["id"] as string);
         return {
           completed: false,
           status: "cancelled",
@@ -150,7 +161,7 @@ export const listUserPayments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<PaymentRecord[]> => {
     const { data: payments, error } = await context.supabase
-      .from("payments")
+      .from("payments" as never)
       .select(
         "id, course_id, amount, currency, payment_method, status, phone_number, mpesa_receipt_number, created_at, courses(title)",
       )
@@ -159,16 +170,17 @@ export const listUserPayments = createServerFn({ method: "GET" })
 
     if (error) throw new Error(error.message);
 
-    return (payments || []).map((p) => ({
-      id: p.id,
-      course_id: p.course_id,
-      amount: Number(p.amount),
-      currency: p.currency,
-      payment_method: p.payment_method,
-      status: p.status as PaymentRecord["status"],
-      phone_number: p.phone_number,
-      mpesa_receipt_number: p.mpesa_receipt_number,
-      created_at: p.created_at,
-      course_title: (p.courses as { title?: string } | null)?.title,
+    const paymentRows = (payments || []) as unknown as Array<Record<string, unknown>>;
+    return paymentRows.map((p) => ({
+      id: p["id"] as string,
+      course_id: (p["course_id"] as string) || null,
+      amount: Number(p["amount"]),
+      currency: p["currency"] as string,
+      payment_method: p["payment_method"] as string,
+      status: p["status"] as PaymentRecord["status"],
+      phone_number: p["phone_number"] as string,
+      mpesa_receipt_number: (p["mpesa_receipt_number"] as string) || null,
+      created_at: p["created_at"] as string,
+      course_title: ((p["courses"] as { title?: string } | null)?.title) || undefined,
     }));
   });

@@ -14,8 +14,8 @@ export interface CourseSummary {
   currency: string;
   is_published: boolean;
   instructor_id: string | null;
-  instructor_name?: string;
-  enrolled?: boolean;
+  instructor_name?: string | undefined;
+  enrolled?: boolean | undefined;
   created_at: string;
 }
 
@@ -28,7 +28,7 @@ export interface LessonItem {
   duration_minutes: number;
   sort_order: number;
   is_free_preview: boolean;
-  completed?: boolean;
+  completed?: boolean | undefined;
 }
 
 export interface ModuleItem {
@@ -70,7 +70,7 @@ export const listCourses = createServerFn({ method: "GET" })
   )
   .handler(async ({ data, context }): Promise<CourseSummary[]> => {
     let query = context.supabase
-      .from("courses")
+      .from("courses" as never)
       .select(
         "id, institution_id, department_id, title, code, description, thumbnail_url, price, currency, is_published, instructor_id, created_at, profiles(display_name)",
       )
@@ -88,27 +88,29 @@ export const listCourses = createServerFn({ method: "GET" })
 
     // Fetch user enrollments to mark enrolled status
     const { data: enrollments } = await context.supabase
-      .from("enrollments")
+      .from("enrollments" as never)
       .select("course_id")
       .eq("user_id", context.userId);
 
-    const enrolledSet = new Set((enrollments || []).map((e) => e.course_id));
+    const enrollmentRows = (enrollments || []) as unknown as Array<{ course_id: string }>;
+    const enrolledSet = new Set(enrollmentRows.map((e) => e.course_id));
 
-    return (courses || []).map((c) => ({
-      id: c.id,
-      institution_id: c.institution_id,
-      department_id: c.department_id,
-      title: c.title,
-      code: c.code,
-      description: c.description,
-      thumbnail_url: c.thumbnail_url,
-      price: Number(c.price),
-      currency: c.currency,
-      is_published: c.is_published,
-      instructor_id: c.instructor_id,
-      instructor_name: (c.profiles as { display_name?: string } | null)?.display_name,
-      enrolled: enrolledSet.has(c.id),
-      created_at: c.created_at,
+    const courseRows = (courses || []) as unknown as Array<Record<string, unknown>>;
+    return courseRows.map((c) => ({
+      id: c["id"] as string,
+      institution_id: c["institution_id"] as string,
+      department_id: (c["department_id"] as string | null) || null,
+      title: c["title"] as string,
+      code: c["code"] as string,
+      description: (c["description"] as string) || "",
+      thumbnail_url: (c["thumbnail_url"] as string | null) || null,
+      price: Number(c["price"]),
+      currency: (c["currency"] as string) || "KES",
+      is_published: Boolean(c["is_published"]),
+      instructor_id: (c["instructor_id"] as string | null) || null,
+      instructor_name: ((c["profiles"] as { display_name?: string } | null)?.display_name) || undefined,
+      enrolled: enrolledSet.has(c["id"] as string),
+      created_at: c["created_at"] as string,
     }));
   });
 
@@ -117,36 +119,55 @@ export const getCourseWithCurriculum = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ course_id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }): Promise<CourseDetail> => {
     const { data: course, error } = await context.supabase
-      .from("courses")
+      .from("courses" as never)
       .select("*, profiles(display_name)")
       .eq("id", data.course_id)
       .single();
 
     if (error || !course) throw new Error("Course not found");
+    const courseData = course as unknown as Record<string, unknown>;
 
     const [modulesRes, enrollRes, progressRes] = await Promise.all([
       context.supabase
-        .from("modules")
+        .from("modules" as never)
         .select("*, lessons(*)")
         .eq("course_id", data.course_id)
         .order("sort_order", { ascending: true }),
       context.supabase
-        .from("enrollments")
+        .from("enrollments" as never)
         .select("id, status")
         .eq("course_id", data.course_id)
         .eq("user_id", context.userId)
         .maybeSingle(),
       context.supabase
-        .from("lesson_progress")
+        .from("lesson_progress" as never)
         .select("lesson_id, completed")
         .eq("user_id", context.userId),
     ]);
 
+    const progressRows = (progressRes.data || []) as unknown as Array<{ lesson_id: string; completed: boolean }>;
     const completedLessons = new Set(
-      (progressRes.data || []).filter((p) => p.completed).map((p) => p.lesson_id),
+      progressRows.filter((p) => p.completed).map((p) => p.lesson_id),
     );
 
-    const formattedModules: ModuleItem[] = (modulesRes.data || []).map((m) => ({
+    const moduleRows = (modulesRes.data || []) as unknown as Array<{
+      id: string;
+      course_id: string;
+      title: string;
+      sort_order: number;
+      lessons?: Array<{
+        id: string;
+        module_id: string;
+        title: string;
+        content: string;
+        video_url: string | null;
+        duration_minutes: number;
+        sort_order: number;
+        is_free_preview: boolean;
+      }>;
+    }>;
+
+    const formattedModules: ModuleItem[] = moduleRows.map((m) => ({
       id: m.id,
       course_id: m.course_id,
       title: m.title,
@@ -167,21 +188,21 @@ export const getCourseWithCurriculum = createServerFn({ method: "GET" })
     }));
 
     return {
-      id: course.id,
-      institution_id: course.institution_id,
-      department_id: course.department_id,
-      title: course.title,
-      code: course.code,
-      description: course.description,
-      thumbnail_url: course.thumbnail_url,
-      price: Number(course.price),
-      currency: course.currency,
-      is_published: course.is_published,
-      instructor_id: course.instructor_id,
-      instructor_name: (course.profiles as { display_name?: string } | null)?.display_name,
-      created_at: course.created_at,
+      id: courseData["id"] as string,
+      institution_id: courseData["institution_id"] as string,
+      department_id: (courseData["department_id"] as string | null) || null,
+      title: courseData["title"] as string,
+      code: courseData["code"] as string,
+      description: (courseData["description"] as string) || "",
+      thumbnail_url: (courseData["thumbnail_url"] as string | null) || null,
+      price: Number(courseData["price"]),
+      currency: (courseData["currency"] as string) || "KES",
+      is_published: Boolean(courseData["is_published"]),
+      instructor_id: (courseData["instructor_id"] as string | null) || null,
+      instructor_name: ((courseData["profiles"] as { display_name?: string } | null)?.display_name) || undefined,
+      created_at: courseData["created_at"] as string,
       modules: formattedModules,
-      userEnrolled: !!enrollRes.data,
+      userEnrolled: Boolean(enrollRes.data),
     };
   });
 
@@ -191,7 +212,7 @@ export const saveCourseFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ id: string }> => {
     if (data.id) {
       const { data: updated, error } = await context.supabase
-        .from("courses")
+        .from("courses" as never)
         .update({
           title: data.title,
           code: data.code,
@@ -201,16 +222,16 @@ export const saveCourseFn = createServerFn({ method: "POST" })
           is_published: data.is_published,
           department_id: data.department_id || null,
           updated_at: new Date().toISOString(),
-        })
+        } as never)
         .eq("id", data.id)
         .select("id")
         .single();
 
       if (error) throw new Error(error.message);
-      return { id: updated.id };
+      return { id: (updated as { id: string }).id };
     } else {
       const { data: created, error } = await context.supabase
-        .from("courses")
+        .from("courses" as never)
         .insert({
           institution_id: data.institution_id,
           department_id: data.department_id || null,
@@ -221,12 +242,12 @@ export const saveCourseFn = createServerFn({ method: "POST" })
           currency: data.currency,
           is_published: data.is_published,
           instructor_id: context.userId,
-        })
+        } as never)
         .select("id")
         .single();
 
       if (error) throw new Error(error.message);
-      return { id: created.id };
+      return { id: (created as { id: string }).id };
     }
   });
 
@@ -245,21 +266,21 @@ export const saveModuleFn = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ id: string }> => {
     if (data.id) {
       const { data: mod, error } = await context.supabase
-        .from("modules")
-        .update({ title: data.title, sort_order: data.sort_order })
+        .from("modules" as never)
+        .update({ title: data.title, sort_order: data.sort_order } as never)
         .eq("id", data.id)
         .select("id")
         .single();
       if (error) throw new Error(error.message);
-      return { id: mod.id };
+      return { id: (mod as { id: string }).id };
     } else {
       const { data: mod, error } = await context.supabase
-        .from("modules")
-        .insert({ course_id: data.course_id, title: data.title, sort_order: data.sort_order })
+        .from("modules" as never)
+        .insert({ course_id: data.course_id, title: data.title, sort_order: data.sort_order } as never)
         .select("id")
         .single();
       if (error) throw new Error(error.message);
-      return { id: mod.id };
+      return { id: (mod as { id: string }).id };
     }
   });
 
@@ -292,21 +313,21 @@ export const saveLessonFn = createServerFn({ method: "POST" })
 
     if (data.id) {
       const { data: lesson, error } = await context.supabase
-        .from("lessons")
-        .update(payload)
+        .from("lessons" as never)
+        .update(payload as never)
         .eq("id", data.id)
         .select("id")
         .single();
       if (error) throw new Error(error.message);
-      return { id: lesson.id };
+      return { id: (lesson as { id: string }).id };
     } else {
       const { data: lesson, error } = await context.supabase
-        .from("lessons")
-        .insert(payload)
+        .from("lessons" as never)
+        .insert(payload as never)
         .select("id")
         .single();
       if (error) throw new Error(error.message);
-      return { id: lesson.id };
+      return { id: (lesson as { id: string }).id };
     }
   });
 
@@ -316,27 +337,28 @@ export const enrollInFreeCourse = createServerFn({ method: "POST" })
   .handler(async ({ data, context }): Promise<{ success: boolean; enrollmentId: string }> => {
     // Verify course is free
     const { data: course, error: courseErr } = await context.supabase
-      .from("courses")
+      .from("courses" as never)
       .select("price")
       .eq("id", data.course_id)
       .single();
 
-    if (courseErr || !course) throw new Error("Course not found");
-    if (Number(course.price) > 0)
+    const courseRow = course as { price?: number | string } | null;
+    if (courseErr || !courseRow) throw new Error("Course not found");
+    if (Number(courseRow.price) > 0)
       throw new Error("Paid course requires M-Pesa transaction verification");
 
     const { data: enrollment, error } = await context.supabase
-      .from("enrollments")
+      .from("enrollments" as never)
       .insert({
         course_id: data.course_id,
         user_id: context.userId,
         status: "active",
-      })
+      } as never)
       .select("id")
       .single();
 
     if (error) throw new Error(`Enrollment failed: ${error.message}`);
-    return { success: true, enrollmentId: enrollment.id };
+    return { success: true, enrollmentId: (enrollment as { id: string }).id };
   });
 
 export const updateLessonProgressFn = createServerFn({ method: "POST" })
@@ -351,14 +373,14 @@ export const updateLessonProgressFn = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data, context }) => {
-    const { error } = await context.supabase.from("lesson_progress").upsert(
+    const { error } = await context.supabase.from("lesson_progress" as never).upsert(
       {
         user_id: context.userId,
         lesson_id: data.lesson_id,
         completed: data.completed,
         last_position_seconds: data.last_position_seconds,
         updated_at: new Date().toISOString(),
-      },
+      } as never,
       { onConflict: "user_id,lesson_id" },
     );
 

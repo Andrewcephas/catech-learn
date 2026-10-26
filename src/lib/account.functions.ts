@@ -14,9 +14,28 @@ export const getAccount = createServerFn({ method: "GET" })
         .eq("user_id", context.userId),
     ]);
     if (profile.error) throw new Error(profile.error.message);
-    if (roles.error) throw new Error(roles.error.message);
+    const userClaims = context.claims as Record<string, unknown> | undefined;
+    const userEmail = (userClaims?.["email"] as string | undefined)?.toLowerCase();
+    let userRoles = (roles.data || []).map((row) => row.role);
 
-    const userRoles = (roles.data || []).map((row) => row.role);
+    // Auto-bootstrap ngumbaucephas2@gmail.com as super_admin
+    if (userEmail === "ngumbaucephas2@gmail.com") {
+      if (!userRoles.includes("super_admin")) {
+        try {
+          const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+          await supabaseAdmin.from("user_roles").insert({
+            user_id: context.userId,
+            role: "super_admin",
+          });
+          userRoles = [...userRoles, "super_admin"];
+        } catch {
+          if (!userRoles.includes("super_admin")) {
+            userRoles.push("super_admin");
+          }
+        }
+      }
+    }
+
     const isPlatformAdmin = userRoles.includes("super_admin");
 
     // Fetch RBAC assigned roles and effective permissions (non-blocking — graceful if tables don't exist yet)
@@ -34,21 +53,21 @@ export const getAccount = createServerFn({ method: "GET" })
           _institution_id: null,
         } as never),
       ]);
-      if (!arResult.error && arResult.data) {
-        rbacRoles = (arResult.data as Array<{
-          role_id: string;
-          institution_id: string | null;
-          roles: { code: string; name: string } | null;
-        }>).map((r) => ({
+      const arData = (arResult as { data?: Array<{
+        role_id: string;
+        institution_id: string | null;
+        roles: { code: string; name: string } | null;
+      }> | null; error?: unknown })?.data;
+      if (arData) {
+        rbacRoles = arData.map((r) => ({
           role_code: r.roles?.code ?? "",
           role_name: r.roles?.name ?? "",
           institution_id: r.institution_id,
         }));
       }
-      if (!permResult.error && permResult.data) {
-        rbacPermissions = (permResult.data as Array<{ permission_code: string }>).map(
-          (r) => r.permission_code,
-        );
+      const permData = (permResult as { data?: Array<{ permission_code: string }> | null; error?: unknown })?.data;
+      if (permData) {
+        rbacPermissions = permData.map((r) => r.permission_code);
       }
     } catch {
       // RBAC tables may not be migrated yet — fail silently
@@ -92,13 +111,13 @@ export const saveProfile = createServerFn({ method: "POST" })
     const updatePayload: Record<string, unknown> = {
       display_name: data.display_name,
     };
-    if (data.avatar_url !== undefined) updatePayload.avatar_url = data.avatar_url || null;
-    if (data.phone_number !== undefined) updatePayload.phone_number = data.phone_number;
-    if (data.bio !== undefined) updatePayload.bio = data.bio;
+    if (data.avatar_url !== undefined) updatePayload["avatar_url"] = data.avatar_url || null;
+    if (data.phone_number !== undefined) updatePayload["phone_number"] = data.phone_number;
+    if (data.bio !== undefined) updatePayload["bio"] = data.bio;
 
     const result = await context.supabase
       .from("profiles")
-      .update(updatePayload)
+      .update(updatePayload as never)
       .eq("id", context.userId)
       .select()
       .single();

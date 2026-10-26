@@ -26,8 +26,8 @@ export interface ClassItem {
   academic_year_id: string | null;
   name: string;
   code: string;
-  department_name?: string;
-  academic_year_name?: string;
+  department_name?: string | undefined;
+  academic_year_name?: string | undefined;
 }
 
 export interface LiveClassItem {
@@ -40,7 +40,7 @@ export interface LiveClassItem {
   end_time: string;
   meeting_url: string;
   provider: string;
-  course_title?: string;
+  course_title?: string | undefined;
 }
 
 export interface AnnouncementItem {
@@ -58,13 +58,13 @@ export const listDepartments = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ institution_id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }): Promise<DepartmentItem[]> => {
     const { data: depts, error } = await context.supabase
-      .from("departments")
+      .from("departments" as never)
       .select("*")
-      .eq("institution_id", data.institution_id)
-      .order("name", { ascending: true });
+      .eq("institution_id" as never, data.institution_id)
+      .order("name" as never, { ascending: true });
 
-    if (error) throw new Error(error.message);
-    return depts || [];
+    if (error) throw new Error((error as { message: string }).message);
+    return (depts as unknown as DepartmentItem[]) || [];
   });
 
 export const saveDepartmentFn = createServerFn({ method: "POST" })
@@ -80,17 +80,17 @@ export const saveDepartmentFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { data: dept, error } = await context.supabase
-      .from("departments")
+      .from("departments" as never)
       .insert({
         institution_id: data.institution_id,
         name: data.name,
         code: data.code,
-      })
+      } as never)
       .select("id")
       .single();
 
-    if (error) throw new Error(error.message);
-    return { id: dept.id };
+    if (error) throw new Error((error as { message: string }).message);
+    return { id: (dept as unknown as { id: string }).id };
   });
 
 export const listAcademicYears = createServerFn({ method: "GET" })
@@ -98,13 +98,13 @@ export const listAcademicYears = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ institution_id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }): Promise<AcademicYearItem[]> => {
     const { data: years, error } = await context.supabase
-      .from("academic_years")
+      .from("academic_years" as never)
       .select("*")
-      .eq("institution_id", data.institution_id)
-      .order("start_date", { ascending: false });
+      .eq("institution_id" as never, data.institution_id)
+      .order("start_date" as never, { ascending: false });
 
-    if (error) throw new Error(error.message);
-    return years || [];
+    if (error) throw new Error((error as { message: string }).message);
+    return (years as unknown as AcademicYearItem[]) || [];
   });
 
 export const saveAcademicYearFn = createServerFn({ method: "POST" })
@@ -121,19 +121,19 @@ export const saveAcademicYearFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { data: year, error } = await context.supabase
-      .from("academic_years")
+      .from("academic_years" as never)
       .insert({
         institution_id: data.institution_id,
         name: data.name,
         start_date: data.start_date,
         end_date: data.end_date,
         is_active: true,
-      })
+      } as never)
       .select("id")
       .single();
 
-    if (error) throw new Error(error.message);
-    return { id: year.id };
+    if (error) throw new Error((error as { message: string }).message);
+    return { id: (year as unknown as { id: string }).id };
   });
 
 export const listClasses = createServerFn({ method: "GET" })
@@ -141,22 +141,27 @@ export const listClasses = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ institution_id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }): Promise<ClassItem[]> => {
     const { data: classes, error } = await context.supabase
-      .from("classes")
-      .select("*, departments(name), academic_years(name)")
-      .eq("institution_id", data.institution_id);
+      .from("classes" as never)
+      .select("*, departments(name), academic_years(name)" as never)
+      .eq("institution_id" as never, data.institution_id);
 
-    if (error) throw new Error(error.message);
+    if (error) throw new Error((error as { message: string }).message);
 
-    return (classes || []).map((c) => ({
-      id: c.id,
-      institution_id: c.institution_id,
-      department_id: c.department_id,
-      academic_year_id: c.academic_year_id,
-      name: c.name,
-      code: c.code,
-      department_name: (c.departments as { name?: string } | null)?.name,
-      academic_year_name: (c.academic_years as { name?: string } | null)?.name,
-    }));
+    return ((classes as unknown as Array<Record<string, unknown>>) || []).map((c) => {
+      const deptName = (c["departments"] as { name?: string } | null)?.name;
+      const yearName = (c["academic_years"] as { name?: string } | null)?.name;
+      const item: ClassItem = {
+        id: c["id"] as string,
+        institution_id: c["institution_id"] as string,
+        department_id: (c["department_id"] as string | null) ?? null,
+        academic_year_id: (c["academic_year_id"] as string | null) ?? null,
+        name: c["name"] as string,
+        code: c["code"] as string,
+      };
+      if (deptName !== undefined) item.department_name = deptName;
+      if (yearName !== undefined) item.academic_year_name = yearName;
+      return item;
+    });
   });
 
 export const saveClassFn = createServerFn({ method: "POST" })
@@ -174,19 +179,19 @@ export const saveClassFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { data: cls, error } = await context.supabase
-      .from("classes")
+      .from("classes" as never)
       .insert({
         institution_id: data.institution_id,
-        department_id: data.department_id || null,
-        academic_year_id: data.academic_year_id || null,
+        department_id: data.department_id ?? null,
+        academic_year_id: data.academic_year_id ?? null,
         name: data.name,
         code: data.code,
-      })
+      } as never)
       .select("id")
       .single();
 
-    if (error) throw new Error(error.message);
-    return { id: cls.id };
+    if (error) throw new Error((error as { message: string }).message);
+    return { id: (cls as unknown as { id: string }).id };
   });
 
 export const listLiveClasses = createServerFn({ method: "GET" })
@@ -194,25 +199,29 @@ export const listLiveClasses = createServerFn({ method: "GET" })
   .inputValidator((input: unknown) => z.object({ institution_id: z.string().uuid() }).parse(input))
   .handler(async ({ data, context }): Promise<LiveClassItem[]> => {
     const { data: live, error } = await context.supabase
-      .from("live_classes")
-      .select("*, courses(title)")
-      .eq("institution_id", data.institution_id)
-      .order("start_time", { ascending: true });
+      .from("live_classes" as never)
+      .select("*, courses(title)" as never)
+      .eq("institution_id" as never, data.institution_id)
+      .order("start_time" as never, { ascending: true });
 
-    if (error) throw new Error(error.message);
+    if (error) throw new Error((error as { message: string }).message);
 
-    return (live || []).map((l) => ({
-      id: l.id,
-      institution_id: l.institution_id,
-      course_id: l.course_id,
-      title: l.title,
-      description: l.description || "",
-      start_time: l.start_time,
-      end_time: l.end_time,
-      meeting_url: l.meeting_url,
-      provider: l.provider,
-      course_title: (l.courses as { title?: string } | null)?.title,
-    }));
+    return ((live as unknown as Array<Record<string, unknown>>) || []).map((l) => {
+      const courseTitle = (l["courses"] as { title?: string } | null)?.title;
+      const item: LiveClassItem = {
+        id: l["id"] as string,
+        institution_id: l["institution_id"] as string,
+        course_id: (l["course_id"] as string | null) ?? null,
+        title: l["title"] as string,
+        description: (l["description"] as string) || "",
+        start_time: l["start_time"] as string,
+        end_time: l["end_time"] as string,
+        meeting_url: l["meeting_url"] as string,
+        provider: (l["provider"] as string) || "zoom",
+      };
+      if (courseTitle !== undefined) item.course_title = courseTitle;
+      return item;
+    });
   });
 
 export const scheduleLiveClassFn = createServerFn({ method: "POST" })
@@ -232,22 +241,22 @@ export const scheduleLiveClassFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { data: created, error } = await context.supabase
-      .from("live_classes")
+      .from("live_classes" as never)
       .insert({
         institution_id: data.institution_id,
-        course_id: data.course_id || null,
+        course_id: data.course_id ?? null,
         instructor_id: context.userId,
         title: data.title,
         description: data.description,
         start_time: data.start_time,
         end_time: data.end_time,
         meeting_url: data.meeting_url,
-      })
+      } as never)
       .select("id")
       .single();
 
-    if (error) throw new Error(error.message);
-    return { id: created.id };
+    if (error) throw new Error((error as { message: string }).message);
+    return { id: (created as unknown as { id: string }).id };
   });
 
 export const listAnnouncements = createServerFn({ method: "GET" })
@@ -259,20 +268,20 @@ export const listAnnouncements = createServerFn({ method: "GET" })
           institution_id: z.string().uuid().optional(),
         })
         .optional()
-        .parse(input) || {},
+        .parse(input) ?? {},
   )
   .handler(async ({ data, context }): Promise<AnnouncementItem[]> => {
-    let query = context.supabase
-      .from("announcements")
+    const baseQuery = context.supabase
+      .from("announcements" as never)
       .select("*")
-      .order("created_at", { ascending: false })
+      .order("created_at" as never, { ascending: false })
       .limit(20);
 
-    if (data?.institution_id) {
-      query = query.eq("institution_id", data.institution_id);
-    }
-
-    const { data: ann, error } = await query;
-    if (error) throw new Error(error.message);
-    return ann || [];
+    const { data: ann, error } = await (
+      data?.institution_id
+        ? (baseQuery as ReturnType<typeof baseQuery.eq>).eq("institution_id" as never, data.institution_id)
+        : baseQuery
+    );
+    if (error) throw new Error((error as { message: string }).message);
+    return (ann as unknown as AnnouncementItem[]) || [];
   });

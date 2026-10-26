@@ -25,7 +25,7 @@ import {
 interface DirectMessagingHubProps {
   currentUserId: string;
   currentUserRole: "company" | "student" | "super_admin";
-  institutionId?: string;
+  institutionId?: string | undefined;
 }
 
 export function DirectMessagingHub({

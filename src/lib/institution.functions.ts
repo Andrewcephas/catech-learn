@@ -26,7 +26,7 @@ export interface AuditLogItem {
   actor_id: string | null;
   action: string;
   target_id: string;
-  details: Record<string, unknown>;
+  details: Record<string, string | number | boolean | null>;
   created_at: string;
 }
 
@@ -72,13 +72,14 @@ export const saveInstitutionFn = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) => saveInstitutionSchema.parse(input))
   .handler(async ({ data, context }): Promise<{ id: string }> => {
-    const { data: resultId, error } = await context.supabase.rpc("save_institution", {
+    const rpcPayload = {
       _name: data.name,
       _code: data.code,
       _contact_email: data.contact_email,
-      _id: data.id,
       _status: data.status,
-    });
+      ...(data.id ? { _id: data.id } : {}),
+    };
+    const { data: resultId, error } = await context.supabase.rpc("save_institution", rpcPayload);
 
     if (error) {
       throw new Error(error.message);
@@ -154,7 +155,7 @@ export const listAuditLogs = createServerFn({ method: "GET" })
       actor_id: l.actor_id,
       action: l.action,
       target_id: l.target_id,
-      details: (l.details as Record<string, unknown>) || {},
+      details: (l.details as Record<string, string | number | boolean | null>) || {},
       created_at: l.created_at,
     }));
   });

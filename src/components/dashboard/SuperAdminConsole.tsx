@@ -29,6 +29,10 @@ import {
   Settings2,
   Phone,
   MapPin,
+  Ticket,
+  Trash2,
+  MessageSquareReply,
+  Send,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -79,12 +83,28 @@ import {
 import { CompanyProfileEditor } from "@/components/dashboard/CompanyProfileEditor";
 import { RbacManagementPanel } from "@/components/dashboard/RbacManagementPanel";
 import { seedDefaultCompaniesFn } from "@/lib/company.functions";
+import {
+  listAllIssuesFn,
+  respondToIssueFn,
+  deleteIssueFn,
+  type IssueItem,
+} from "@/lib/issues.functions";
 
-export function SuperAdminConsole() {
+export function SuperAdminConsole({
+  initialTab,
+}: {
+  initialTab?: "overview" | "issues" | "companies" | "users" | "courses" | "payments" | "audit" | "rbac" | "settings";
+} = {}) {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<
-    "overview" | "companies" | "users" | "courses" | "payments" | "audit" | "rbac" | "settings"
-  >("overview");
+    "overview" | "issues" | "companies" | "users" | "courses" | "payments" | "audit" | "rbac" | "settings"
+  >(initialTab || "overview");
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // Filter & Search states
   const [companySearch, setCompanySearch] = useState("");
@@ -138,6 +158,52 @@ export function SuperAdminConsole() {
   const [sysAllowCompanyReg, setSysAllowCompanyReg] = useState(true);
   const [sysMaintenanceMode, setSysMaintenanceMode] = useState(false);
   const [sysSaveMsg, setSysSaveMsg] = useState("");
+
+  // Support Issues & Tickets Query & State
+  const { data: allIssues = [], isLoading: issuesLoading } = useQuery({
+    queryKey: ["superadmin-issues"],
+    queryFn: () => listAllIssuesFn(),
+  });
+
+  const [issueSearch, setIssueSearch] = useState("");
+  const [issueStatusFilter, setIssueStatusFilter] = useState<string>("all");
+  const [issuePriorityFilter, setIssuePriorityFilter] = useState<string>("all");
+  const [selectedIssueForResponse, setSelectedIssueForResponse] = useState<IssueItem | null>(null);
+  const [issueResponseModalOpen, setIssueResponseModalOpen] = useState(false);
+  const [adminResponseText, setAdminResponseText] = useState("");
+  const [issueTargetStatus, setIssueTargetStatus] = useState<"open" | "in_progress" | "resolved" | "closed">("resolved");
+  const [issueActionMsg, setIssueActionMsg] = useState("");
+
+  const respondIssueMutation = useMutation({
+    mutationFn: () => {
+      if (!selectedIssueForResponse) throw new Error("No issue selected");
+      return respondToIssueFn({
+        data: {
+          issue_id: selectedIssueForResponse.id,
+          status: issueTargetStatus,
+          admin_response: adminResponseText.trim() || undefined,
+        },
+      });
+    },
+    onSuccess: (res) => {
+      setIssueActionMsg(res.message || "Issue updated and student notified!");
+      void queryClient.invalidateQueries({ queryKey: ["superadmin-issues"] });
+      void queryClient.invalidateQueries({ queryKey: ["my-issues"] });
+      setTimeout(() => {
+        setIssueResponseModalOpen(false);
+        setIssueActionMsg("");
+        setSelectedIssueForResponse(null);
+      }, 1500);
+    },
+  });
+
+  const deleteIssueMutation = useMutation({
+    mutationFn: (issueId: string) => deleteIssueFn({ data: { issue_id: issueId } }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["superadmin-issues"] });
+      void queryClient.invalidateQueries({ queryKey: ["my-issues"] });
+    },
+  });
 
   // Sync loaded system settings
   useEffect(() => {
@@ -512,6 +578,22 @@ export function SuperAdminConsole() {
             </p>
           </CardContent>
         </Card>
+        <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
+              Support Issues & Tickets
+            </CardTitle>
+            <Ticket className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-black text-amber-500">
+              {allIssues.length}
+            </div>
+            <p className="text-[11px] text-muted-foreground mt-1">
+              <span className="text-amber-500 font-bold">{allIssues.filter((i) => i.status === "open").length} open</span> • {allIssues.filter((i) => i.status === "resolved").length} resolved
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Governance Navigation Tabs */}
@@ -519,6 +601,14 @@ export function SuperAdminConsole() {
         <TabsList className="bg-muted/70 p-1 rounded-2xl flex flex-wrap h-auto gap-1">
           <TabsTrigger value="overview" className="text-xs font-semibold gap-1.5 py-2 px-3">
             <Shield className="h-3.5 w-3.5" /> Platform Health & Security
+          </TabsTrigger>
+          <TabsTrigger value="issues" className="text-xs font-semibold gap-1.5 py-2 px-3 relative">
+            <Ticket className="h-3.5 w-3.5 text-amber-500" /> Support Issues
+            {allIssues.filter((i) => i.status === "open").length > 0 && (
+              <Badge className="ml-1 h-4 px-1.5 text-[9px] font-bold bg-amber-500 text-white">
+                {allIssues.filter((i) => i.status === "open").length}
+              </Badge>
+            )}
           </TabsTrigger>
           <TabsTrigger value="companies" className="text-xs font-semibold gap-1.5 py-2 px-3">
             <Building2 className="h-3.5 w-3.5" /> Companies ({institutions.length})
@@ -597,7 +687,188 @@ export function SuperAdminConsole() {
           </div>
         </TabsContent>
 
-        {/* TAB 2: Companies & Tenants */}
+        {/* TAB 2: Support Issues & User Tickets */}
+        <TabsContent value="issues" className="mt-6 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+            <div className="relative w-full max-w-md">
+              <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                placeholder="Search issues by title, reporter name, or description..."
+                value={issueSearch}
+                onChange={(e) => setIssueSearch(e.target.value)}
+                className="w-full rounded-xl border border-input bg-card pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <div className="flex rounded-xl border border-input p-1 bg-muted/60 text-xs">
+                {(["all", "open", "in_progress", "resolved", "closed"] as const).map((s) => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setIssueStatusFilter(s)}
+                    className={`px-2.5 py-1 rounded-lg font-medium transition-all capitalize ${
+                      issueStatusFilter === s
+                        ? "bg-primary text-primary-foreground shadow-xs"
+                        : "text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {s.replace("_", " ")}
+                  </button>
+                ))}
+              </div>
+
+              <select
+                value={issuePriorityFilter}
+                onChange={(e) => setIssuePriorityFilter(e.target.value)}
+                className="rounded-xl border border-input bg-card px-2.5 py-1 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              >
+                <option value="all">All Priorities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+              </select>
+            </div>
+          </div>
+
+          <Card className="border border-border/80 rounded-2xl overflow-hidden shadow-xs bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow className="text-xs bg-muted/40 hover:bg-muted/40">
+                  <TableHead>Reporter & Tenancy</TableHead>
+                  <TableHead>Issue / Subject</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Priority</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Logged</TableHead>
+                  <TableHead className="text-right">Governance Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {allIssues.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={7} className="text-center py-10 text-xs text-muted-foreground">
+                      <Ticket className="h-8 w-8 mx-auto text-muted-foreground/40 mb-2" />
+                      No support tickets logged yet. When students or companies raise issues, they will appear here.
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  allIssues
+                    .filter((item) => {
+                      if (issueStatusFilter !== "all" && item.status !== issueStatusFilter) return false;
+                      if (issuePriorityFilter !== "all" && item.priority !== issuePriorityFilter) return false;
+                      if (!issueSearch.trim()) return true;
+                      const q = issueSearch.toLowerCase();
+                      return (
+                        item.title.toLowerCase().includes(q) ||
+                        item.description.toLowerCase().includes(q) ||
+                        item.reporterName.toLowerCase().includes(q) ||
+                        (item.institutionName && item.institutionName.toLowerCase().includes(q))
+                      );
+                    })
+                    .map((item) => (
+                      <TableRow key={item.id} className="text-xs hover:bg-muted/30">
+                        <TableCell>
+                          <div className="font-bold text-foreground">{item.reporterName}</div>
+                          {item.institutionName ? (
+                            <span className="text-[10px] text-primary flex items-center gap-1 mt-0.5">
+                              🏢 {item.institutionName}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground">General Scholar</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="max-w-xs">
+                          <p className="font-semibold text-foreground line-clamp-1">{item.title}</p>
+                          <p className="text-[11px] text-muted-foreground line-clamp-2 mt-0.5">{item.description}</p>
+                          {item.adminResponse && (
+                            <div className="mt-1.5 p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-700 dark:text-emerald-400">
+                              <span className="font-bold">Latest Response:</span> {item.adminResponse}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className="capitalize text-[10px]">
+                            {item.category}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={`text-[10px] font-bold capitalize ${
+                              item.priority === "critical"
+                                ? "bg-red-600 text-white"
+                                : item.priority === "high"
+                                  ? "bg-orange-600 text-white"
+                                  : item.priority === "medium"
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-slate-500 text-white"
+                            }`}
+                          >
+                            {item.priority}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            className={`text-[10px] font-bold capitalize ${
+                              item.status === "open"
+                                ? "bg-blue-600 text-white"
+                                : item.status === "in_progress"
+                                  ? "bg-amber-500 text-white"
+                                  : item.status === "resolved"
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-slate-500 text-white"
+                            }`}
+                          >
+                            {item.status.replace("_", " ")}
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-muted-foreground font-mono text-[11px]">
+                          {new Date(item.createdAt).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                setSelectedIssueForResponse(item);
+                                setAdminResponseText(item.adminResponse || "");
+                                setIssueTargetStatus(
+                                  (item.status as "open" | "in_progress" | "resolved" | "closed") || "resolved"
+                                );
+                                setIssueResponseModalOpen(true);
+                              }}
+                              className="text-xs h-7 px-2.5 border-border/80 hover:bg-primary hover:text-primary-foreground"
+                            >
+                              <MessageSquareReply className="h-3 w-3 mr-1" />
+                              Respond / Status
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                if (confirm(`Are you sure you want to delete ticket: "${item.title}"?`)) {
+                                  deleteIssueMutation.mutate(item.id);
+                                }
+                              }}
+                              className="text-xs h-7 px-2 text-destructive hover:bg-destructive/10"
+                              title="Delete Ticket"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                )}
+              </TableBody>
+            </Table>
+          </Card>
+        </TabsContent>
+
+        {/* TAB 3: Companies & Tenants */}
         <TabsContent value="companies" className="mt-6 space-y-4">
           <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
             <div className="relative w-full max-w-md">
@@ -728,9 +999,9 @@ export function SuperAdminConsole() {
                               setInstName(inst.name);
                               setInstCode(inst.code);
                               setInstEmail(inst.contact_email);
-                              setInstPhone((inst as unknown as Record<string, string>).phone_number || "");
-                              setInstAddress((inst as unknown as Record<string, string>).address || "");
-                              setInstDescription((inst as unknown as Record<string, string>).description || "");
+                              setInstPhone((inst as unknown as Record<string, string>)["phone_number"] || "");
+                              setInstAddress((inst as unknown as Record<string, string>)["address"] || "");
+                              setInstDescription((inst as unknown as Record<string, string>)["description"] || "");
                               setInstAdminEmail(inst.contact_email);
                               setInstAdminPassword("");
                               setShowAdminPassword(false);
@@ -1733,6 +2004,87 @@ export function SuperAdminConsole() {
               />
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Respond to Support Issue / Update Status */}
+      <Dialog open={issueResponseModalOpen} onOpenChange={setIssueResponseModalOpen}>
+        <DialogContent className="max-w-lg rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <Ticket className="h-5 w-5 text-amber-500" />
+              Respond to Support Ticket
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Update ticket lifecycle state and post an official resolution back to{" "}
+              <strong>{selectedIssueForResponse?.reporterName}</strong>.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedIssueForResponse && (
+            <div className="space-y-4 py-2 text-xs">
+              <div className="p-3 bg-muted/40 rounded-xl border border-border/70">
+                <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-1">
+                  <span>Category: <strong className="capitalize text-foreground">{selectedIssueForResponse.category}</strong></span>
+                  <span>Priority: <strong className="capitalize text-foreground">{selectedIssueForResponse.priority}</strong></span>
+                </div>
+                <h4 className="font-bold text-sm text-foreground">{selectedIssueForResponse.title}</h4>
+                <p className="text-muted-foreground mt-1 text-xs whitespace-pre-wrap">{selectedIssueForResponse.description}</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-foreground">Update Ticket Status</label>
+                <select
+                  value={issueTargetStatus}
+                  onChange={(e) => setIssueTargetStatus(e.target.value as "open" | "in_progress" | "resolved" | "closed")}
+                  className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs focus:ring-1 focus:ring-primary"
+                >
+                  <option value="open">Open (Awaiting review)</option>
+                  <option value="in_progress">In Progress (Being investigated)</option>
+                  <option value="resolved">Resolved (Issue addressed)</option>
+                  <option value="closed">Closed (Completed & archived)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold mb-1 text-foreground">Official Admin Resolution / Comment</label>
+                <textarea
+                  rows={4}
+                  value={adminResponseText}
+                  onChange={(e) => setAdminResponseText(e.target.value)}
+                  placeholder="Explain the resolution or ask follow-up questions. The student will receive an instant notification..."
+                  className="w-full rounded-xl border border-input bg-background p-3 text-xs focus:ring-1 focus:ring-primary resize-none"
+                />
+              </div>
+
+              {issueActionMsg && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 font-semibold text-xs flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4" />
+                  {issueActionMsg}
+                </div>
+              )}
+            </div>
+          )}
+
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIssueResponseModalOpen(false)}
+              className="text-xs"
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={respondIssueMutation.isPending}
+              onClick={() => respondIssueMutation.mutate()}
+              className="bg-primary text-primary-foreground font-semibold text-xs"
+            >
+              <Send className="h-3.5 w-3.5 mr-1.5" />
+              {respondIssueMutation.isPending ? "Submitting Resolution…" : "Send Resolution & Notify Student"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

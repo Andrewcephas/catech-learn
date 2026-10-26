@@ -237,6 +237,7 @@ export function QuizPlayerModal({
           </div>
         ) : (
           /* Question Display */
+          currentQuestion == null ? null : (
           <div className="space-y-6 py-2">
             <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
               <span>
@@ -312,7 +313,9 @@ export function QuizPlayerModal({
               )}
             </div>
           </div>
+          )
         )}
+
       </DialogContent>
     </Dialog>
   );

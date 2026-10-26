@@ -20,6 +20,10 @@ import {
   Layers,
   CheckCircle2,
   ExternalLink,
+  Ticket,
+  BarChart3,
+  Bell,
+  Sliders,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,8 +40,8 @@ export interface NavItem {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
-  badge?: string | number;
-  badgeVariant?: "default" | "secondary" | "destructive" | "outline";
+  badge?: string | number | undefined;
+  badgeVariant?: "default" | "secondary" | "destructive" | "outline" | undefined;
 }
 
 interface DashboardSidebarProps {
@@ -128,6 +132,11 @@ export function DashboardSidebar({
       icon: Smartphone,
     },
     {
+      id: "my_issues",
+      label: "Support Issues",
+      icon: Ticket,
+    },
+    {
       id: "profile",
       label: "Student Profile",
       icon: Settings,
@@ -190,13 +199,18 @@ export function DashboardSidebar({
       badgeVariant: "destructive",
     },
     {
+      id: "platform_issues",
+      label: "Support Issues",
+      icon: Ticket,
+    },
+    {
       id: "company_overview",
-      label: "Tenant Companies",
+      label: "Companies Dashboard",
       icon: Building2,
     },
     {
       id: "company_learners",
-      label: "Global Learners",
+      label: "Global Users",
       icon: Users,
     },
     {
@@ -205,26 +219,21 @@ export function DashboardSidebar({
       icon: BookOpen,
     },
     {
-      id: "company_assignments",
-      label: "Assignments & Notes",
-      icon: FileCheck2,
-    },
-    {
       id: "messages",
-      label: "Direct Messages",
+      label: "Platform Messages",
       icon: MessageSquare,
       badge: unreadCount > 0 ? unreadCount : undefined,
       badgeVariant: "destructive",
     },
     {
-      id: "company_live",
-      label: "Virtual Classes",
-      icon: Sparkles,
+      id: "company_payments",
+      label: "Global M-Pesa Ledger",
+      icon: Smartphone,
     },
     {
-      id: "company_payments",
-      label: "Global M-Pesa",
-      icon: Smartphone,
+      id: "rbac_management",
+      label: "RBAC & Permissions",
+      icon: Layers,
     },
     {
       id: "profile",

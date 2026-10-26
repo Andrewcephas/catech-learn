@@ -22,7 +22,7 @@ export interface PlatformUserItem {
   institutionName: string | null;
   institutionId: string | null;
   createdAt: string;
-  phoneNumber?: string;
+  phoneNumber?: string | undefined;
   isSuperAdmin: boolean;
 }
 
@@ -61,19 +61,21 @@ export const getPlatformGlobalStats = createServerFn({ method: "GET" })
 
     // 3. Courses count
     const { data: courses = [] } = await context.supabase
-      .from("courses")
+      .from("courses" as never)
       .select("id, is_published");
-    const totalCourses = (courses || []).length;
-    const publishedCourses = (courses || []).filter((c) => c.is_published).length;
+    const courseRows = (courses || []) as unknown as Array<{ id: string; is_published: boolean }>;
+    const totalCourses = courseRows.length;
+    const publishedCourses = courseRows.filter((c) => c.is_published).length;
 
     // 4. Payments & Revenue
     const { data: payments = [] } = await context.supabase
-      .from("payments")
+      .from("payments" as never)
       .select("amount, status");
 
     let totalRevenueKes = 0;
     let completedPaymentsCount = 0;
-    for (const p of payments || []) {
+    const paymentRows = (payments || []) as unknown as Array<{ amount: number | string; status: string }>;
+    for (const p of paymentRows) {
       if (p.status === "completed") {
         totalRevenueKes += Number(p.amount) || 0;
         completedPaymentsCount += 1;
@@ -107,7 +109,7 @@ export const listAllPlatformUsers = createServerFn({ method: "GET" })
       context.supabase.from("profiles").select("id, display_name, avatar_url, created_at").order("created_at", { ascending: false }),
       context.supabase.from("user_roles").select("user_id, role"),
       context.supabase.from("institution_memberships").select("user_id, institution_id, role, institutions(name)"),
-      context.supabase.from("payments").select("user_id, phone_number").order("created_at", { ascending: false }),
+      context.supabase.from("payments" as never).select("user_id, phone_number").order("created_at", { ascending: false }),
     ]);
 
     const roleMap = new Map<string, string>();
@@ -129,7 +131,8 @@ export const listAllPlatformUsers = createServerFn({ method: "GET" })
     }
 
     const phoneMap = new Map<string, string>();
-    for (const p of paymentsRes.data || []) {
+    const paymentRows = (paymentsRes.data || []) as unknown as Array<{ user_id: string; phone_number: string | null }>;
+    for (const p of paymentRows) {
       if (p.phone_number && !phoneMap.has(p.user_id)) {
         phoneMap.set(p.user_id, p.phone_number);
       }
@@ -203,7 +206,7 @@ export const listAllPlatformCourses = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }): Promise<PlatformCourseItem[]> => {
     const { data: courses = [], error } = await context.supabase
-      .from("courses")
+      .from("courses" as never)
       .select("id, institution_id, title, code, price, currency, is_published, created_at, profiles(display_name), institutions(name)")
       .order("created_at", { ascending: false });
 
@@ -211,26 +214,28 @@ export const listAllPlatformCourses = createServerFn({ method: "GET" })
 
     // Get enrollment counts per course
     const { data: enrollments = [] } = await context.supabase
-      .from("enrollments")
+      .from("enrollments" as never)
       .select("course_id");
 
     const countMap = new Map<string, number>();
-    for (const e of enrollments || []) {
+    const enrollmentRows = (enrollments || []) as unknown as Array<{ course_id: string }>;
+    for (const e of enrollmentRows) {
       countMap.set(e.course_id, (countMap.get(e.course_id) || 0) + 1);
     }
 
-    return (courses || []).map((c) => ({
-      id: c.id,
-      institutionId: c.institution_id,
-      institutionName: (c.institutions as { name?: string } | null)?.name || "CATECH Institution",
-      title: c.title,
-      code: c.code,
-      price: Number(c.price),
-      currency: c.currency,
-      isPublished: c.is_published,
-      instructorName: (c.profiles as { display_name?: string } | null)?.display_name || "Faculty Lead",
-      enrolledCount: countMap.get(c.id) || 0,
-      createdAt: c.created_at,
+    const courseRows = (courses || []) as unknown as Array<Record<string, unknown>>;
+    return courseRows.map((c) => ({
+      id: c["id"] as string,
+      institutionId: c["institution_id"] as string,
+      institutionName: (c["institutions"] as { name?: string } | null)?.name || "CATECH Institution",
+      title: c["title"] as string,
+      code: c["code"] as string,
+      price: Number(c["price"]),
+      currency: c["currency"] as string,
+      isPublished: Boolean(c["is_published"]),
+      instructorName: (c["profiles"] as { display_name?: string } | null)?.display_name || "Faculty Lead",
+      enrolledCount: countMap.get(c["id"] as string) || 0,
+      createdAt: c["created_at"] as string,
     }));
   });
 
@@ -243,8 +248,8 @@ export const toggleCoursePublishFn = createServerFn({ method: "POST" })
   )
   .handler(async ({ data, context }) => {
     const { error } = await context.supabase
-      .from("courses")
-      .update({ is_published: data.is_published })
+      .from("courses" as never)
+      .update({ is_published: data.is_published } as never)
       .eq("id", data.course_id);
 
     if (error) throw new Error(error.message);
@@ -256,23 +261,24 @@ export const listAllPlatformPayments = createServerFn({ method: "GET" })
   .middleware([requireSupabaseAuth])
   .handler(async ({ context }) => {
     const { data: payments = [], error } = await context.supabase
-      .from("payments")
+      .from("payments" as never)
       .select("id, institution_id, user_id, course_id, amount, currency, payment_method, status, checkout_request_id, mpesa_receipt_number, phone_number, created_at, courses(title), institutions(name)")
       .order("created_at", { ascending: false })
       .limit(100);
 
     if (error) throw new Error(error.message);
 
-    return (payments || []).map((p) => ({
-      id: p.id,
-      institutionName: (p.institutions as { name?: string } | null)?.name || "System Payment",
-      courseTitle: (p.courses as { title?: string } | null)?.title || "Course Session",
-      phoneNumber: p.phone_number,
-      amount: Number(p.amount),
-      currency: p.currency,
-      status: p.status,
-      receiptNumber: p.mpesa_receipt_number,
-      createdAt: p.created_at,
+    const paymentRows = (payments || []) as unknown as Array<Record<string, unknown>>;
+    return paymentRows.map((p) => ({
+      id: p["id"] as string,
+      institutionName: (p["institutions"] as { name?: string } | null)?.name || "System Payment",
+      courseTitle: (p["courses"] as { title?: string } | null)?.title || "Course Session",
+      phoneNumber: p["phone_number"] as string,
+      amount: Number(p["amount"]),
+      currency: p["currency"] as string,
+      status: p["status"] as string,
+      receiptNumber: p["mpesa_receipt_number"] as string | null,
+      createdAt: p["created_at"] as string,
     }));
   });
 
@@ -514,7 +520,7 @@ export const updatePlatformSystemSettingsFn = createServerFn({ method: "POST" })
         await supabaseAdmin
           .from("platform_system_settings" as never)
           .update(payload as never)
-          .eq("id", (existing as { id: string }).id);
+          .eq("id", (existing as unknown as { id: string }).id);
       } else {
         await supabaseAdmin.from("platform_system_settings" as never).insert(payload as never);
       }
@@ -562,13 +568,13 @@ export const updateCompanyFullCredentialsFn = createServerFn({ method: "POST" })
         status: data.status,
         updated_at: new Date().toISOString(),
       };
-      if (data.phone_number !== undefined) updatePayload.phone_number = data.phone_number;
-      if (data.address !== undefined) updatePayload.address = data.address;
-      if (data.description !== undefined) updatePayload.description = data.description;
+      if (data.phone_number !== undefined) updatePayload["phone_number"] = data.phone_number;
+      if (data.address !== undefined) updatePayload["address"] = data.address;
+      if (data.description !== undefined) updatePayload["description"] = data.description;
 
       await supabaseAdmin
-        .from("institutions")
-        .update(updatePayload)
+        .from("institutions" as never)
+        .update(updatePayload as never)
         .eq("id", data.institution_id);
 
       // 2. If admin_password or admin_email provided, manage the company administrator auth user
