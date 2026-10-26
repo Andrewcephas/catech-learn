@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { queryOptions, useSuspenseQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { queryOptions, useSuspenseQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
 import {
   UserRound,
   GraduationCap,
@@ -13,12 +13,16 @@ import {
   Sparkles,
   KeyRound,
   Layers,
+  MessageSquare,
+  Users,
+  Smartphone,
+  CheckCircle2,
+  AlertCircle,
+  Menu,
 } from "lucide-react";
-import { SiteNav, SiteFooter } from "@/components/SiteNav";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Dialog,
   DialogContent,
@@ -29,22 +33,37 @@ import {
 } from "@/components/ui/dialog";
 import { getAccount, saveProfile } from "@/lib/account.functions";
 import { bootstrapSuperAdminFn } from "@/lib/institution.functions";
-import { SuperAdminConsole } from "@/components/dashboard/SuperAdminConsole";
-import { InstitutionAdminConsole } from "@/components/dashboard/InstitutionAdminConsole";
-import { TeacherWorkspace } from "@/components/dashboard/TeacherWorkspace";
+import { listPublicCompanies, type CompanySummary } from "@/lib/company.functions";
+import { listDirectMessagesFn } from "@/lib/messaging.functions";
+
+// Dashboard Custom Components
+import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { CompanyDirectory } from "@/components/dashboard/CompanyDirectory";
+import { CompanyCourseCatalog } from "@/components/dashboard/CompanyCourseCatalog";
+import { CompanyLearnersManager } from "@/components/dashboard/CompanyLearnersManager";
+import { DirectMessagingHub } from "@/components/dashboard/DirectMessagingHub";
+import { CompanyAssignmentsAndNotes } from "@/components/dashboard/CompanyAssignmentsAndNotes";
+import { CourseLearningPlayer } from "@/components/dashboard/CourseLearningPlayer";
 import { StudentHub } from "@/components/dashboard/StudentHub";
+import { TeacherWorkspace } from "@/components/dashboard/TeacherWorkspace";
+import { CampusAcademicManager } from "@/components/dashboard/CampusAcademicManager";
+import { SuperAdminConsole } from "@/components/dashboard/SuperAdminConsole";
+import { RbacManagementPanel } from "@/components/dashboard/RbacManagementPanel";
+import { CompanyProfileEditor } from "@/components/dashboard/CompanyProfileEditor";
+import { StudentProfileEditor } from "@/components/dashboard/StudentProfileEditor";
+import { listUserPayments } from "@/lib/payment.functions";
 
 const accountOptions = queryOptions({ queryKey: ["account"], queryFn: () => getAccount() });
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
     meta: [
-      { title: "Your dashboard — CATECH Learn" },
-      { name: "description", content: "Your CATECH Learn account and learning dashboard." },
-      { property: "og:title", content: "Your CATECH Learn dashboard" },
+      { title: "Dashboard — CATECH Learn" },
+      { name: "description", content: "Your CATECH Learn account, sessions, and company portal." },
+      { property: "og:title", content: "CATECH Learn Portal" },
       {
         property: "og:description",
-        content: "Manage your learning account and multi-tenant portal.",
+        content: "Multi-tenant learning environment with M-Pesa payments and direct student messaging.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -56,18 +75,139 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 function Dashboard() {
   const { data } = useSuspenseQuery(accountOptions);
-  const [name, setName] = useState(data.profile.display_name);
-  const [copiedId, setCopiedId] = useState(false);
   const [bootstrapModalOpen, setBootstrapModalOpen] = useState(false);
   const [bootstrapMessage, setBootstrapMessage] = useState("");
   const [bootstrapError, setBootstrapError] = useState("");
 
   const queryClient = useQueryClient();
 
-  const profileMutation = useMutation({
-    mutationFn: () => saveProfile({ data: { display_name: name } }),
-    onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["account"] }),
+  // Determine user capabilities
+  const rbacPerms = (data as { rbacPermissions?: string[] }).rbacPermissions || [];
+  const rbacRoleCodes = ((data as { rbacRoles?: Array<{ role_code: string }> }).rbacRoles || []).map(
+    (r) => r.role_code,
+  );
+
+  const hasInstAdmin =
+    data.memberships.some((m) => m.role === "institution_admin") ||
+    rbacRoleCodes.some((code) => ["institution_admin", "institution_owner"].includes(code)) ||
+    rbacPerms.some((p) =>
+      ["institutions.view", "institutions.settings.manage", "users.roles.assign"].includes(p),
+    );
+
+  const hasTeacher =
+    data.roles.includes("teacher") ||
+    data.memberships.some((m) => m.role === "teacher") ||
+    rbacRoleCodes.some((code) => ["teacher", "academic_admin", "department_head"].includes(code)) ||
+    rbacPerms.some((p) =>
+      ["courses.create", "courses.update", "courses.content.edit", "assessments.grade"].includes(p),
+    );
+
+  // Active role: "company" vs "student" vs "super_admin"
+  const [userRole, setUserRole] = useState<"company" | "student" | "super_admin">(() => {
+    // Super admin never has student workspace
+    if (data.isPlatformAdmin) {
+      if (typeof window !== "undefined") {
+        const stored = localStorage.getItem("catech_active_role");
+        if (stored === "company") return "company";
+      }
+      return "super_admin";
+    }
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("catech_active_role");
+      if (stored === "company" && (hasInstAdmin || hasTeacher)) {
+        return "company";
+      }
+      if (stored === "student") return "student";
+    }
+    return hasInstAdmin || hasTeacher ? "company" : "student";
   });
+
+  // Active Company / Institution selection state
+  const [selectedCompany, setSelectedCompany] = useState<{
+    id: string;
+    name: string;
+    code: string;
+  } | null>(() => {
+    // Check if user is already a member of an institution
+    const firstMembership = data.memberships[0]?.institution;
+    if (firstMembership) {
+      return {
+        id: firstMembership.id,
+        name: firstMembership.name,
+        code: firstMembership.code,
+      };
+    }
+    // Check localStorage
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("catech_selected_company");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {
+          // ignore
+        }
+      }
+    }
+    return null;
+  });
+
+  // Currently playing course (fullscreen player mode)
+  const [playingCourseId, setPlayingCourseId] = useState<string | null>(null);
+
+  // Active navigation view - student directly lands on my_learning progress
+  const [activeView, setActiveView] = useState<string>(() => {
+    return userRole === "company"
+      ? "company_overview"
+      : userRole === "super_admin"
+        ? "platform_control"
+        : "my_learning";
+  });
+
+  // Query unread messages
+  const { data: messages = [] } = useQuery({
+    queryKey: ["direct-messages"],
+    queryFn: () => listDirectMessagesFn(),
+  });
+  const unreadCount = messages.filter((m) => !m.is_read && m.recipient_id === data.profile.id).length;
+
+  // Query payments
+  const { data: payments = [] } = useQuery({
+    queryKey: ["user-payments"],
+    queryFn: () => listUserPayments(),
+  });
+
+  // Update company selection and persist
+  const handleSelectCompany = (company: CompanySummary) => {
+    const payload = {
+      id: company.id,
+      name: company.name,
+      code: company.code,
+    };
+    setSelectedCompany(payload);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("catech_selected_company", JSON.stringify(payload));
+      localStorage.setItem("catech_selected_company_id", company.id);
+    }
+    setActiveView("my_learning");
+  };
+
+  const handleRoleSwitch = (newRole: "company" | "student" | "super_admin") => {
+    // Super admin never has student workspace
+    if (data.isPlatformAdmin && newRole === "student") {
+      newRole = "super_admin";
+    }
+    setUserRole(newRole);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("catech_active_role", newRole);
+    }
+    setActiveView(
+      newRole === "super_admin"
+        ? "platform_control"
+        : newRole === "company"
+          ? "company_overview"
+          : "my_learning",
+    );
+  };
 
   const bootstrapMutation = useMutation({
     mutationFn: () => bootstrapSuperAdminFn(),
@@ -82,353 +222,523 @@ function Dashboard() {
     },
   });
 
-  const copyUserId = () => {
-    void navigator.clipboard.writeText(data.profile.id);
-    setCopiedId(true);
-    setTimeout(() => setCopiedId(false), 2000);
-  };
-
-  const rbacPerms = ((data as { rbacPermissions?: string[] }).rbacPermissions || []);
-  const rbacRoleCodes = ((data as { rbacRoles?: Array<{ role_code: string }> }).rbacRoles || []).map((r) => r.role_code);
-
-  const hasInstAdmin =
-    data.memberships.some((m) => m.role === "institution_admin") ||
-    rbacRoleCodes.some((code) => ["institution_admin", "institution_owner"].includes(code)) ||
-    rbacPerms.some((p) => ["institutions.view", "institutions.settings.manage", "users.roles.assign"].includes(p));
-
-  const hasTeacher =
-    data.roles.includes("teacher") ||
-    data.memberships.some((m) => m.role === "teacher") ||
-    rbacRoleCodes.some((code) => ["teacher", "academic_admin", "department_head"].includes(code)) ||
-    rbacPerms.some((p) => ["courses.create", "courses.update", "courses.content.edit", "assessments.grade"].includes(p));
-
-  // Determine initial active tab respecting user login selection if allowed
-  const getInitialTab = () => {
-    if (typeof window !== "undefined") {
-      const preferred = localStorage.getItem("catech_active_role");
-      if (preferred === "student") return "learning";
-      if (preferred === "teacher" && (hasTeacher || data.isPlatformAdmin)) return "teaching";
-      if (preferred === "admin" && (data.isPlatformAdmin || hasInstAdmin)) {
-        return data.isPlatformAdmin ? "platform" : "campus";
-      }
-    }
-    return data.isPlatformAdmin
-      ? "platform"
-      : hasInstAdmin
-        ? "campus"
-        : hasTeacher
-          ? "teaching"
-          : "learning";
-  };
-
-  const [activeTab, setActiveTab] = useState(getInitialTab);
+  // If learning player is open, render full learning view
+  if (playingCourseId) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="p-4 max-w-7xl mx-auto">
+          <CourseLearningPlayer
+            courseId={playingCourseId}
+            onBack={() => setPlayingCourseId(null)}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <SiteNav />
+    <div className="min-h-screen bg-background flex flex-col md:flex-row">
+      {/* 1. Left Collapsible Side Navigation */}
+      <DashboardSidebar
+        activeView={activeView}
+        onViewChange={setActiveView}
+        userRole={userRole}
+        onRoleSwitch={handleRoleSwitch}
+        selectedCompany={selectedCompany}
+        onSelectCompanyClick={() => setActiveView("select_company")}
+        displayName={data.profile.display_name}
+        isPlatformAdmin={data.isPlatformAdmin}
+        hasCompanyAccess={hasInstAdmin || hasTeacher}
+        unreadCount={unreadCount}
+      />
 
-      <main className="flex-1 mx-auto w-full max-w-6xl px-4 sm:px-6 py-8">
-        {/* Header Section */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between border-b border-border/70 pb-6">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-primary">
-                CATECH SaaS Platform
-              </span>
-              {data.isPlatformAdmin && (
-                <Badge className="bg-primary text-primary-foreground font-semibold text-xs">
-                  <Shield className="h-3 w-3 mr-1" /> Super Admin
-                </Badge>
-              )}
+      {/* 2. Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
+        {/* Top App Bar */}
+        <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-card/85 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
+                  {userRole === "company"
+                    ? "Company Portal"
+                    : userRole === "super_admin"
+                      ? "Platform Administrator"
+                      : "Student Workspace"}
+                </span>
+                {selectedCompany && (
+                  <Badge
+                    variant="secondary"
+                    className="text-[10px] h-4.5 px-2 font-mono text-foreground font-semibold"
+                  >
+                    🏢 {selectedCompany.name}
+                  </Badge>
+                )}
+              </div>
+              <h1 className="text-base sm:text-lg font-black tracking-tight text-foreground truncate max-w-xs sm:max-w-md">
+                {activeView === "select_company" && "Partner Companies & Academies"}
+                {activeView === "sessions" && `${selectedCompany ? selectedCompany.name : "Available"} Course Sessions`}
+                {activeView === "my_learning" && "My Enrolled Sessions & Progress"}
+                {activeView === "assignments" && "Coursework, Tasks & Study Notes"}
+                {activeView === "messages" && "Direct 1-on-1 Messages"}
+                {activeView === "company_overview" && "Company Overview & Operations"}
+                {activeView === "company_learners" && "Learner Directory & Contacts"}
+                {activeView === "company_courses" && "Course & Curriculum Studio"}
+                {activeView === "company_assignments" && "Module Assignments & Grading"}
+                {activeView === "company_live" && "Live Classes & Campus Announcements"}
+                {activeView === "company_payments" && "M-Pesa Collections & Records"}
+                {activeView === "payments" && "Lipa na M-Pesa Receipts"}
+                {activeView === "profile" && "Account & Credentials"}
+                {activeView === "company_settings" && "Company & Tenancy Settings"}
+                {activeView === "platform_control" && "Super Admin Platform Control"}
+                {activeView === "rbac_management" && "Role-Based Access Control"}
+              </h1>
             </div>
-            <h1 className="mt-1.5 text-3xl font-extrabold tracking-tight">
-              Welcome, {data.profile.display_name || "Learner"}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Your personalized multi-tenant educational environment.
-            </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {!data.isPlatformAdmin && (
+          {/* Right Header Actions */}
+          <div className="flex items-center gap-2.5">
+            {/* Quick Messages Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setActiveView("messages")}
+              className="text-xs h-8.5 rounded-xl border-border/80 relative"
+            >
+              <MessageSquare className="h-3.5 w-3.5 mr-1 text-primary" />
+              <span className="hidden sm:inline">Messages</span>
+              {unreadCount > 0 && (
+                <Badge className="ml-1.5 h-4 w-4 p-0 text-[10px] font-bold bg-destructive text-destructive-foreground flex items-center justify-center rounded-full">
+                  {unreadCount}
+                </Badge>
+              )}
+            </Button>
+
+            {/* Quick Switch Company Button (for students) */}
+            {userRole === "student" && (
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setBootstrapModalOpen(true)}
-                className="text-xs border-dashed"
+                onClick={() => setActiveView("select_company")}
+                className="text-xs h-8.5 rounded-xl border-border/80 hidden sm:flex items-center"
               >
-                <KeyRound className="h-3.5 w-3.5 mr-1 text-amber-500" />
-                Setup Platform Admin
+                <Building2 className="h-3.5 w-3.5 mr-1 text-primary" />
+                <span>{selectedCompany ? "Switch Company" : "Select Company"}</span>
               </Button>
             )}
 
-            <div className="flex items-center rounded-lg border border-border/80 bg-muted/40 px-3 py-1.5 text-xs font-mono">
-              <span className="text-muted-foreground mr-2">ID:</span>
-              <span className="text-foreground">{data.profile.id.slice(0, 13)}…</span>
-              <button
-                type="button"
-                onClick={copyUserId}
-                className="ml-2 text-muted-foreground hover:text-foreground transition-colors"
-                title="Copy full UUID"
-                aria-label="Copy full UUID"
+            {/* Platform Admin Bootstrap Trigger */}
+            {!data.isPlatformAdmin && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setBootstrapModalOpen(true)}
+                className="text-xs h-8 text-muted-foreground hover:text-foreground hidden lg:flex"
               >
-                {copiedId ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-600" />
-                ) : (
-                  <Copy className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
+                <KeyRound className="h-3.5 w-3.5 mr-1 text-amber-500" />
+                Bootstrap
+              </Button>
+            )}
           </div>
-        </div>
+        </header>
 
-        {/* Navigation Tabs */}
-        <div className="mt-6">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-            <TabsList className="flex flex-wrap h-auto gap-1 bg-muted/60 p-1 rounded-lg">
-              {data.isPlatformAdmin && (
-                <TabsTrigger value="platform" className="gap-1.5 py-2 px-3.5 text-xs font-semibold">
-                  <Shield className="h-4 w-4" /> Platform Admin
-                </TabsTrigger>
-              )}
+        {/* Main Body Content Container */}
+        <main className="flex-1 p-4 sm:p-8 max-w-7xl w-full mx-auto">
+          {/* VIEW: Select Company Directory */}
+          {activeView === "select_company" && (
+            <CompanyDirectory
+              selectedCompanyId={selectedCompany?.id || null}
+              onSelectCompany={handleSelectCompany}
+              onExploreCourses={() => setActiveView("sessions")}
+            />
+          )}
 
-              {(hasInstAdmin || data.isPlatformAdmin) && (
-                <TabsTrigger value="campus" className="gap-1.5 py-2 px-3.5 text-xs font-semibold">
-                  <Building2 className="h-4 w-4" /> Campus Admin
-                </TabsTrigger>
-              )}
+          {/* VIEW: Available Sessions (with M-Pesa Payment) */}
+          {activeView === "sessions" && (
+            <CompanyCourseCatalog
+              company={selectedCompany}
+              onStartLearning={(courseId) => setPlayingCourseId(courseId)}
+              onSwitchCompanyClick={() => setActiveView("select_company")}
+            />
+          )}
 
-              {(hasTeacher || data.isPlatformAdmin) && (
-                <TabsTrigger value="teaching" className="gap-1.5 py-2 px-3.5 text-xs font-semibold">
-                  <BookOpen className="h-4 w-4" /> Faculty Studio
-                </TabsTrigger>
-              )}
+          {/* VIEW: Student Hub / My Learning */}
+          {activeView === "my_learning" && (
+            <StudentHub displayName={data.profile.display_name} />
+          )}
 
-              <TabsTrigger value="learning" className="gap-1.5 py-2 px-3.5 text-xs font-semibold">
-                <GraduationCap className="h-4 w-4" /> My Learning
-              </TabsTrigger>
+          {/* VIEW: Direct Messages */}
+          {activeView === "messages" && (
+            <DirectMessagingHub
+              currentUserId={data.profile.id}
+              currentUserRole={userRole}
+              institutionId={selectedCompany?.id}
+            />
+          )}
 
-              <TabsTrigger value="profile" className="gap-1.5 py-2 px-3.5 text-xs font-semibold">
-                <UserRound className="h-4 w-4" /> Profile & Account
-              </TabsTrigger>
-            </TabsList>
+          {/* VIEW: Student Tasks & Notes / Company Assignments */}
+          {(activeView === "assignments" || activeView === "company_assignments") && (
+            <CompanyAssignmentsAndNotes
+              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+              isCompanyAdmin={userRole === "company" || userRole === "super_admin"}
+            />
+          )}
 
-            {/* Platform Admin Console Tab */}
-            {data.isPlatformAdmin && (
-              <TabsContent value="platform" className="focus-visible:outline-none">
-                <SuperAdminConsole />
-              </TabsContent>
-            )}
+          {/* VIEW: Company Learners Directory & Contacts */}
+          {activeView === "company_learners" && (
+            <CompanyLearnersManager
+              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+              companyName={selectedCompany?.name || "Your Company"}
+            />
+          )}
 
-            {/* Campus Admin Console Tab */}
-            {(hasInstAdmin || data.isPlatformAdmin) && (
-              <TabsContent value="campus" className="focus-visible:outline-none">
-                <InstitutionAdminConsole memberships={data.memberships} />
-              </TabsContent>
-            )}
-
-            {/* Teacher Workspace Tab */}
-            {(hasTeacher || data.isPlatformAdmin) && (
-              <TabsContent value="teaching" className="focus-visible:outline-none">
-                <TeacherWorkspace
-                  displayName={data.profile.display_name}
-                  institutionId={data.memberships[0]?.institution_id}
-                />
-              </TabsContent>
-            )}
-
-            {/* Student Learning Hub Tab */}
-            <TabsContent value="learning" className="focus-visible:outline-none">
-              <StudentHub displayName={data.profile.display_name} />
-            </TabsContent>
-
-            {/* User Profile Tab */}
-            <TabsContent value="profile" className="focus-visible:outline-none">
-              <div className="grid gap-6 md:grid-cols-2">
-                <Card className="border border-border/80 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <UserRound className="h-5 w-5 text-primary" />
-                      Account Profile
+          {/* VIEW: Company Overview */}
+          {activeView === "company_overview" && (
+            <div className="space-y-8">
+              {/* Stats Overview */}
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
+                      Active Company
                     </CardTitle>
-                    <CardDescription>
-                      Update your public profile display name and credentials.
-                    </CardDescription>
+                    <Building2 className="h-4 w-4 text-primary" />
                   </CardHeader>
                   <CardContent>
-                    <form
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        profileMutation.mutate();
-                      }}
-                      className="space-y-4"
-                    >
-                      <div>
-                        <label
-                          className="block text-xs font-semibold uppercase text-muted-foreground mb-1.5"
-                          htmlFor="display-name"
-                        >
-                          Display Name
-                        </label>
-                        <input
-                          id="display-name"
-                          required
-                          maxLength={100}
-                          value={name}
-                          onChange={(e) => {
-                            setName(e.target.value);
-                            profileMutation.reset();
-                          }}
-                          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
-                        />
-                      </div>
-
-                      <Button
-                        type="submit"
-                        disabled={profileMutation.isPending}
-                        className="bg-primary text-primary-foreground"
-                      >
-                        <Save className="h-4 w-4 mr-1.5" />
-                        {profileMutation.isPending ? "Saving…" : "Save Profile"}
-                      </Button>
-
-                      {profileMutation.isSuccess && (
-                        <p role="status" className="text-sm text-emerald-600 font-medium">
-                          Profile changes saved successfully.
-                        </p>
-                      )}
-                      {profileMutation.error && (
-                        <p role="alert" className="text-sm text-destructive font-medium">
-                          {profileMutation.error.message}
-                        </p>
-                      )}
-                    </form>
+                    <div className="text-lg font-bold truncate">
+                      {selectedCompany?.name || "CATECH Partner"}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Code: {selectedCompany?.code || "INST-01"}
+                    </p>
                   </CardContent>
                 </Card>
 
-                <Card className="border border-border/80 shadow-sm">
-                  <CardHeader>
-                    <CardTitle className="text-lg font-bold flex items-center gap-2">
-                      <Building2 className="h-5 w-5 text-primary" />
-                      Assigned Institution & Roles
+                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
+                      Student Enrolled
                     </CardTitle>
-                    <CardDescription>
-                      Academic affiliations governed by Row Level Security.
-                    </CardDescription>
+                    <Users className="h-4 w-4 text-emerald-600" />
                   </CardHeader>
-                  <CardContent className="space-y-4">
-                    <div>
-                      <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-                        Global System Roles
-                      </h4>
-                      <div className="flex flex-wrap gap-2">
-                        {data.roles.map((r) => (
-                          <Badge key={r} variant="secondary" className="capitalize text-xs">
-                            {r.replace("_", " ")}
-                          </Badge>
-                        ))}
-                      </div>
+                  <CardContent>
+                    <div className="text-2xl font-black text-emerald-600">
+                      {payments.length > 0 ? payments.length : 1}
                     </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Active student profiles
+                    </p>
+                  </CardContent>
+                </Card>
 
-                    <div className="border-t border-border pt-4">
-                      <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">
-                        Institutional Affiliations
-                      </h4>
-                      {data.memberships.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          Not assigned to an institution yet. An institution administrator or
-                          platform administrator will assign your campus affiliation.
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {data.memberships.map((m) => (
-                            <div
-                              key={m.id}
-                              className="flex items-center justify-between rounded-md border border-border p-3"
-                            >
-                              <div>
-                                <p className="font-semibold text-sm">
-                                  {m.institution?.name || "Assigned Institution"}
-                                </p>
-                                <p className="text-xs text-muted-foreground font-mono">
-                                  {m.institution?.code}
-                                </p>
-                              </div>
-                              <Badge variant="outline" className="capitalize text-xs font-medium">
-                                {m.role.replace("_", " ")}
-                              </Badge>
-                            </div>
-                          ))}
-                        </div>
-                      )}
+                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
+                      1-on-1 Messages
+                    </CardTitle>
+                    <MessageSquare className="h-4 w-4 text-primary" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-black text-foreground">
+                      {messages.length}
                     </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      {unreadCount} unread message{unreadCount !== 1 ? "s" : ""}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2">
+                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
+                      M-Pesa Collections
+                    </CardTitle>
+                    <Smartphone className="h-4 w-4 text-emerald-600" />
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-black text-emerald-600">
+                      KES {payments.reduce((acc, p) => acc + (p.status === "completed" ? p.amount : 0), 0).toLocaleString()}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Verified transactions
+                    </p>
                   </CardContent>
                 </Card>
               </div>
-            </TabsContent>
-          </Tabs>
-        </div>
-      </main>
+
+              {/* Quick Actions Grid */}
+              <div className="grid gap-4 sm:grid-cols-3">
+                <Card
+                  onClick={() => setActiveView("company_learners")}
+                  className="p-5 border border-border/80 rounded-2xl hover:border-primary/60 hover:shadow-md cursor-pointer transition-all bg-card"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
+                    <Users className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-bold text-sm text-foreground">View Students & Contacts</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    See student phone numbers, curriculum progress %, and message them directly.
+                  </p>
+                </Card>
+
+                <Card
+                  onClick={() => setActiveView("company_assignments")}
+                  className="p-5 border border-border/80 rounded-2xl hover:border-primary/60 hover:shadow-md cursor-pointer transition-all bg-card"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
+                    <FileCheck2 className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-bold text-sm text-foreground">Create Module Assignments</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Design practical challenges, upload lesson notes, and grade submissions.
+                  </p>
+                </Card>
+
+                <Card
+                  onClick={() => setActiveView("company_courses")}
+                  className="p-5 border border-border/80 rounded-2xl hover:border-primary/60 hover:shadow-md cursor-pointer transition-all bg-card"
+                >
+                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
+                    <BookOpen className="h-5 w-5" />
+                  </div>
+                  <h3 className="font-bold text-sm text-foreground">Manage Course Sessions</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Add new video modules, set KES pricing, and publish curriculum to students.
+                  </p>
+                </Card>
+              </div>
+
+              {/* Enrolled Students Component */}
+              <CompanyLearnersManager
+                institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+                companyName={selectedCompany?.name || "Your Company"}
+              />
+            </div>
+          )}
+
+          {/* VIEW: Course Sessions Manager (Company Studio) */}
+          {activeView === "company_courses" && (
+            <TeacherWorkspace
+              displayName={data.profile.display_name}
+              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+            />
+          )}
+
+          {/* VIEW: Live Virtual Classes */}
+          {activeView === "company_live" && (
+            <CampusAcademicManager
+              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id || ""}
+            />
+          )}
+
+          {/* VIEW: Payments / Receipts Table */}
+          {(activeView === "payments" || activeView === "company_payments") && (
+            <div className="space-y-6">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-border/70 pb-5">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="p-1.5 rounded-lg bg-emerald-600/10 text-emerald-600">
+                      <Smartphone className="h-5 w-5" />
+                    </span>
+                    <h2 className="text-2xl font-bold tracking-tight text-foreground">
+                      Lipa na M-Pesa Transaction Ledger
+                    </h2>
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Real-time Safaricom Daraja STK Push verification and instant receipts.
+                  </p>
+                </div>
+              </div>
+
+              {payments.length === 0 ? (
+                <Card className="p-12 text-center border-dashed border-border/80">
+                  <Smartphone className="mx-auto h-12 w-12 text-muted-foreground/40 mb-3" />
+                  <h3 className="text-base font-bold text-foreground">No payments recorded</h3>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    When courses are enrolled and paid via M-Pesa, transaction records appear here.
+                  </p>
+                </Card>
+              ) : (
+                <div className="rounded-2xl border border-border/80 overflow-hidden bg-card">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-muted/50 border-b border-border/70 font-bold">
+                      <tr>
+                        <th className="p-3">Reference / Phone</th>
+                        <th className="p-3">Course Title</th>
+                        <th className="p-3">Amount</th>
+                        <th className="p-3">Status</th>
+                        <th className="p-3">Receipt Number</th>
+                        <th className="p-3 text-right">Date</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {payments.map((p) => (
+                        <tr key={p.id} className="hover:bg-muted/30">
+                          <td className="p-3 font-mono">{p.phone_number}</td>
+                          <td className="p-3 font-semibold">{p.course_title || "Accredited Session"}</td>
+                          <td className="p-3 font-bold text-emerald-600">
+                            KES {p.amount.toLocaleString()}
+                          </td>
+                          <td className="p-3">
+                            <Badge
+                              className={`text-[10px] font-bold ${
+                                p.status === "completed"
+                                  ? "bg-emerald-600 text-white"
+                                  : p.status === "pending"
+                                    ? "bg-amber-500 text-white"
+                                    : "bg-destructive text-white"
+                              }`}
+                            >
+                              {p.status}
+                            </Badge>
+                          </td>
+                          <td className="p-3 font-mono">{p.mpesa_receipt_number || "Pending Daraja"}</td>
+                          <td className="p-3 text-right text-muted-foreground">
+                            {new Date(p.created_at).toLocaleDateString()}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* VIEW: Company Settings / Profile */}
+          {activeView === "company_settings" && (
+            <div className="space-y-6">
+              <div className="border-b border-border/70 pb-4">
+                <h2 className="text-xl font-black text-foreground">Company & Tenancy Profile</h2>
+                <p className="text-xs text-muted-foreground">
+                  Manage your organization's brand, contact credentials, bio, and student-facing profile.
+                </p>
+              </div>
+              <CompanyProfileEditor
+                institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+                isSuperAdmin={data.isPlatformAdmin}
+              />
+            </div>
+          )}
+
+          {/* VIEW: Account Profile & Credentials (Student / User) */}
+          {activeView === "profile" && (
+            <div className="space-y-6">
+              <div className="border-b border-border/70 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-xl font-black text-foreground">
+                    {userRole === "company" ? "Company & Account Profile" : "Student Profile & Credentials"}
+                  </h2>
+                  <p className="text-xs text-muted-foreground">
+                    {userRole === "company"
+                      ? "Manage your enterprise organization details and personal administrator identity."
+                      : "Manage your student credentials, Safaricom M-Pesa phone number, and learning profile."}
+                  </p>
+                </div>
+              </div>
+
+              {userRole === "company" ? (
+                <div className="space-y-8">
+                  <div>
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-primary mb-3">
+                      🏢 Company Organizational Profile
+                    </h3>
+                    <CompanyProfileEditor
+                      institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+                      isSuperAdmin={data.isPlatformAdmin}
+                    />
+                  </div>
+
+                  <div className="pt-6 border-t border-border/70">
+                    <h3 className="text-sm font-bold uppercase tracking-wider text-primary mb-3">
+                      👤 Personal Administrator Identity
+                    </h3>
+                    <StudentProfileEditor
+                      profile={data.profile}
+                      roles={data.roles}
+                      isPlatformAdmin={data.isPlatformAdmin}
+                      selectedCompany={selectedCompany}
+                      onBrowseCompaniesClick={() => setActiveView("select_company")}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <StudentProfileEditor
+                  profile={data.profile}
+                  roles={data.roles}
+                  isPlatformAdmin={data.isPlatformAdmin}
+                  selectedCompany={selectedCompany}
+                  onBrowseCompaniesClick={() => setActiveView("select_company")}
+                />
+              )}
+            </div>
+          )}
+
+          {/* VIEW: Platform Control */}
+          {activeView === "platform_control" && (
+            <SuperAdminConsole />
+          )}
+
+          {/* VIEW: RBAC Management */}
+          {activeView === "rbac_management" && (
+            <RbacManagementPanel institutionId={selectedCompany?.id} />
+          )}
+        </main>
+      </div>
 
       {/* Bootstrap Super Admin Dialog */}
       <Dialog open={bootstrapModalOpen} onOpenChange={setBootstrapModalOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <KeyRound className="h-5 w-5 text-primary" />
-              Initial Platform Bootstrap
+            <DialogTitle className="text-base font-bold flex items-center gap-2">
+              <KeyRound className="h-5 w-5 text-amber-500" />
+              Platform Admin Bootstrap
             </DialogTitle>
-            <DialogDescription>
-              CATECH Learn enforces a secure bootstrap mechanism. The first verified operator can
-              provision the initial Super Admin role using atomic advisory locking.
+            <DialogDescription className="text-xs">
+              Promote your verified account to initial platform super administrator.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2 text-sm text-muted-foreground">
-            <p>Your verified account UUID is:</p>
-            <code className="block rounded bg-muted p-2 font-mono text-xs text-foreground select-all">
-              {data.profile.id}
-            </code>
-            <p className="text-xs">
-              To bootstrap via server function, ensure{" "}
-              <strong className="text-foreground">SUPABASE_SERVICE_ROLE_KEY</strong> is set in your
-              server environment.
+          <div className="space-y-3 py-2 text-xs">
+            <p className="text-muted-foreground">
+              This initialization triggers advisory lock verification and assigns full multi-tenant super admin privileges.
             </p>
 
             {bootstrapMessage && (
-              <div
-                role="status"
-                className="rounded-md bg-emerald-500/10 p-3 text-xs text-emerald-600 font-medium"
-              >
+              <p className="text-emerald-600 font-semibold p-2.5 rounded-lg bg-emerald-500/10">
                 {bootstrapMessage}
-              </div>
+              </p>
             )}
+
             {bootstrapError && (
-              <div
-                role="alert"
-                className="rounded-md bg-destructive/10 p-3 text-xs text-destructive font-medium"
-              >
+              <p className="text-destructive font-medium p-2.5 rounded-lg bg-destructive/10">
                 {bootstrapError}
-              </div>
+              </p>
             )}
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBootstrapModalOpen(false)}>
+          <DialogFooter className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setBootstrapModalOpen(false)}
+              className="text-xs"
+            >
               Close
             </Button>
-            <Button
-              onClick={() => bootstrapMutation.mutate()}
-              disabled={bootstrapMutation.isPending}
-              className="bg-primary text-primary-foreground"
-            >
-              {bootstrapMutation.isPending ? "Provisioning…" : "Execute Bootstrap"}
-            </Button>
+            {!bootstrapMessage && (
+              <Button
+                size="sm"
+                disabled={bootstrapMutation.isPending}
+                onClick={() => bootstrapMutation.mutate()}
+                className="bg-primary text-primary-foreground font-semibold text-xs"
+              >
+                {bootstrapMutation.isPending ? "Initializing…" : "Confirm Super Admin Bootstrap"}
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <SiteFooter />
     </div>
   );
 }

@@ -79,12 +79,26 @@ export const getAccount = createServerFn({ method: "GET" })
 export const saveProfile = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
   .inputValidator((input: unknown) =>
-    z.object({ display_name: z.string().trim().min(1).max(100) }).parse(input),
+    z
+      .object({
+        display_name: z.string().trim().min(1).max(100),
+        avatar_url: z.string().url().optional().or(z.literal("")),
+        phone_number: z.string().trim().optional(),
+        bio: z.string().trim().max(500).optional(),
+      })
+      .parse(input),
   )
   .handler(async ({ data, context }) => {
+    const updatePayload: Record<string, unknown> = {
+      display_name: data.display_name,
+    };
+    if (data.avatar_url !== undefined) updatePayload.avatar_url = data.avatar_url || null;
+    if (data.phone_number !== undefined) updatePayload.phone_number = data.phone_number;
+    if (data.bio !== undefined) updatePayload.bio = data.bio;
+
     const result = await context.supabase
       .from("profiles")
-      .update(data)
+      .update(updatePayload)
       .eq("id", context.userId)
       .select()
       .single();
