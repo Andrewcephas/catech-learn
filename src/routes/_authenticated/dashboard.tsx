@@ -38,7 +38,10 @@ import { listPublicCompanies, type CompanySummary } from "@/lib/company.function
 import { listDirectMessagesFn } from "@/lib/messaging.functions";
 
 // Dashboard Custom Components
-import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
+import { DashboardSidebar, type RoleType } from "@/components/dashboard/DashboardSidebar";
+import { StudentDashboard } from "@/components/dashboard/StudentDashboard";
+import { TeacherDashboard } from "@/components/dashboard/TeacherDashboard";
+import { CompanyAdminDashboard } from "@/components/dashboard/CompanyAdminDashboard";
 import { CompanyDirectory } from "@/components/dashboard/CompanyDirectory";
 import { CompanyCourseCatalog } from "@/components/dashboard/CompanyCourseCatalog";
 import { CompanyLearnersManager } from "@/components/dashboard/CompanyLearnersManager";
@@ -81,6 +84,7 @@ function Dashboard() {
   const [bootstrapModalOpen, setBootstrapModalOpen] = useState(false);
   const [bootstrapMessage, setBootstrapMessage] = useState("");
   const [bootstrapError, setBootstrapError] = useState("");
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -105,24 +109,36 @@ function Dashboard() {
       ["courses.create", "courses.update", "courses.content.edit", "assessments.grade"].includes(p),
     );
 
-  // Active role: "company" vs "student" vs "super_admin"
-  const [userRole, setUserRole] = useState<"company" | "student" | "super_admin">(() => {
-    // Super admin never has student workspace
-    if (data.isPlatformAdmin) {
+  // Active role: "super_admin" vs "institution_admin" vs "teacher" vs "student"
+  const [userRole, setUserRole] = useState<RoleType>(() => {
+    // 1. Super admin always lands on super_admin by default
+    if (data.isPlatformAdmin || data.roles.includes("super_admin")) {
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("catech_active_role");
-        if (stored === "company") return "company";
+        if (stored === "company" || stored === "institution_admin") return "institution_admin";
+        if (stored === "teacher") return "teacher";
       }
       return "super_admin";
     }
+
+    // 2. Saved role preference (if user has permissions)
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("catech_active_role");
-      if (stored === "company" && (hasInstAdmin || hasTeacher)) {
-        return "company";
+      if ((stored === "company" || stored === "institution_admin") && hasInstAdmin) {
+        return "institution_admin";
       }
-      if (stored === "student") return "student";
+      if (stored === "teacher" && hasTeacher) {
+        return "teacher";
+      }
+      if (stored === "student") {
+        return "student";
+      }
     }
-    return hasInstAdmin || hasTeacher ? "company" : "student";
+
+    // 3. Fallback based on authorized roles
+    if (hasInstAdmin) return "institution_admin";
+    if (hasTeacher) return "teacher";
+    return "student";
   });
 
   // Active Company / Institution selection state
@@ -157,13 +173,12 @@ function Dashboard() {
   // Currently playing course (fullscreen player mode)
   const [playingCourseId, setPlayingCourseId] = useState<string | null>(null);
 
-  // Active navigation view - student directly lands on my_learning progress
+  // Active navigation view based on role
   const [activeView, setActiveView] = useState<string>(() => {
-    return userRole === "company"
-      ? "company_overview"
-      : userRole === "super_admin"
-        ? "platform_control"
-        : "my_learning";
+    if (userRole === "super_admin") return "platform_control";
+    if (userRole === "company" || userRole === "institution_admin") return "company_overview";
+    if (userRole === "teacher") return "teacher_overview";
+    return "my_learning";
   });
 
   // Query unread messages
@@ -194,7 +209,7 @@ function Dashboard() {
     setActiveView("my_learning");
   };
 
-  const handleRoleSwitch = (newRole: "company" | "student" | "super_admin") => {
+  const handleRoleSwitch = (newRole: RoleType) => {
     // Super admin never has student workspace
     if (data.isPlatformAdmin && newRole === "student") {
       newRole = "super_admin";
@@ -206,9 +221,11 @@ function Dashboard() {
     setActiveView(
       newRole === "super_admin"
         ? "platform_control"
-        : newRole === "company"
+        : newRole === "company" || newRole === "institution_admin"
           ? "company_overview"
-          : "my_learning",
+          : newRole === "teacher"
+            ? "teacher_overview"
+            : "my_learning",
     );
   };
 
@@ -251,25 +268,41 @@ function Dashboard() {
         onSelectCompanyClick={() => setActiveView("select_company")}
         displayName={data.profile.display_name}
         isPlatformAdmin={data.isPlatformAdmin}
-        hasCompanyAccess={hasInstAdmin || hasTeacher}
+        hasCompanyAccess={hasInstAdmin}
+        hasTeacherAccess={hasTeacher}
         unreadCount={unreadCount}
+        mobileOpen={mobileOpen}
+        onMobileOpenChange={setMobileOpen}
       />
 
       {/* 2. Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {/* Top App Bar */}
-        <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-card/85 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between">
+        <header className="sticky top-0 z-20 h-16 border-b border-border/70 bg-card/90 backdrop-blur-xl px-4 sm:px-8 flex items-center justify-between">
           <div className="flex items-center gap-3">
+            {/* Mobile menu trigger */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setMobileOpen(true)}
+              className="md:hidden h-9 w-9 text-muted-foreground hover:text-foreground"
+              aria-label="Open navigation drawer"
+            >
+              <Menu className="h-5 w-5" />
+            </Button>
+
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-[10px] font-bold uppercase tracking-widest text-primary">
-                  {userRole === "company"
+                  {userRole === "company" || userRole === "institution_admin"
                     ? "Company Portal"
                     : userRole === "super_admin"
-                      ? "Platform Administrator"
-                      : "Student Workspace"}
+                      ? "Super Admin Platform"
+                      : userRole === "teacher"
+                        ? "Faculty Studio"
+                        : "Student Workspace"}
                 </span>
-                {selectedCompany && (
+                {selectedCompany && userRole !== "super_admin" && (
                   <Badge
                     variant="secondary"
                     className="text-[10px] h-4.5 px-2 font-mono text-foreground font-semibold"
@@ -291,6 +324,10 @@ function Dashboard() {
                 {activeView === "company_assignments" && "Module Assignments & Grading"}
                 {activeView === "company_live" && "Live Classes & Campus Announcements"}
                 {activeView === "company_payments" && "M-Pesa Collections & Records"}
+                {activeView === "teacher_overview" && "Instructor Studio & Submissions"}
+                {activeView === "teacher_courses" && "Assigned Teaching Sessions"}
+                {activeView === "teacher_grading" && "Assignments & Marking Ledger"}
+                {activeView === "teacher_learners" && "Enrolled Students Roster"}
                 {activeView === "payments" && "Lipa na M-Pesa Receipts"}
                 {activeView === "profile" && "Account & Credentials"}
                 {activeView === "company_settings" && "Company & Tenancy Settings"}
@@ -371,14 +408,32 @@ function Dashboard() {
 
           {/* VIEW: Student Hub / My Learning */}
           {activeView === "my_learning" && (
-            <StudentHub displayName={data.profile.display_name} />
+            <StudentDashboard
+              displayName={data.profile.display_name}
+              selectedCompany={selectedCompany}
+              onStartLearning={(courseId) => setPlayingCourseId(courseId)}
+              onBrowseCompaniesClick={() => setActiveView("select_company")}
+              onNavigateToMessages={() => setActiveView("messages")}
+            />
+          )}
+
+          {/* VIEW: Teacher Workspace & Studio */}
+          {(activeView === "teacher_overview" ||
+            activeView === "teacher_courses" ||
+            activeView === "teacher_grading" ||
+            activeView === "teacher_learners") && (
+            <TeacherDashboard
+              displayName={data.profile.display_name}
+              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
+              onNavigateToMessages={() => setActiveView("messages")}
+            />
           )}
 
           {/* VIEW: Direct Messages */}
           {activeView === "messages" && (
             <DirectMessagingHub
               currentUserId={data.profile.id}
-              currentUserRole={userRole}
+              currentUserRole={userRole === "institution_admin" ? "company" : userRole}
               institutionId={selectedCompany?.id}
             />
           )}
@@ -387,147 +442,11 @@ function Dashboard() {
           {(activeView === "assignments" || activeView === "company_assignments") && (
             <CompanyAssignmentsAndNotes
               institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
-              isCompanyAdmin={userRole === "company" || userRole === "super_admin"}
+              isCompanyAdmin={userRole === "company" || userRole === "institution_admin" || userRole === "super_admin"}
             />
           )}
 
           {/* VIEW: Company Learners Directory & Contacts */}
-          {activeView === "company_learners" && (
-            <CompanyLearnersManager
-              institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
-              companyName={selectedCompany?.name || "Your Company"}
-            />
-          )}
-
-          {/* VIEW: Company Overview */}
-          {activeView === "company_overview" && (
-            userRole === "super_admin" ? (
-              <SuperAdminConsole initialTab="companies" />
-            ) : (
-            <div className="space-y-8">
-              {/* Stats Overview */}
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
-                      Active Company
-                    </CardTitle>
-                    <Building2 className="h-4 w-4 text-primary" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-lg font-bold truncate">
-                      {selectedCompany?.name || "CATECH Partner"}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Code: {selectedCompany?.code || "INST-01"}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
-                      Student Enrolled
-                    </CardTitle>
-                    <Users className="h-4 w-4 text-emerald-600" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-black text-emerald-600">
-                      {payments.length > 0 ? payments.length : 1}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Active student profiles
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
-                      1-on-1 Messages
-                    </CardTitle>
-                    <MessageSquare className="h-4 w-4 text-primary" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-black text-foreground">
-                      {messages.length}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      {unreadCount} unread message{unreadCount !== 1 ? "s" : ""}
-                    </p>
-                  </CardContent>
-                </Card>
-
-                <Card className="border border-border/80 rounded-2xl shadow-xs bg-card">
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-xs font-semibold text-muted-foreground uppercase">
-                      M-Pesa Collections
-                    </CardTitle>
-                    <Smartphone className="h-4 w-4 text-emerald-600" />
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-black text-emerald-600">
-                      KES {payments.reduce((acc, p) => acc + (p.status === "completed" ? p.amount : 0), 0).toLocaleString()}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground mt-1">
-                      Verified transactions
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Quick Actions Grid */}
-              <div className="grid gap-4 sm:grid-cols-3">
-                <Card
-                  onClick={() => setActiveView("company_learners")}
-                  className="p-5 border border-border/80 rounded-2xl hover:border-primary/60 hover:shadow-md cursor-pointer transition-all bg-card"
-                >
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
-                    <Users className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-bold text-sm text-foreground">View Students & Contacts</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    See student phone numbers, curriculum progress %, and message them directly.
-                  </p>
-                </Card>
-
-                <Card
-                  onClick={() => setActiveView("company_assignments")}
-                  className="p-5 border border-border/80 rounded-2xl hover:border-primary/60 hover:shadow-md cursor-pointer transition-all bg-card"
-                >
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
-                    <FileCheck2 className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-bold text-sm text-foreground">Create Module Assignments</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Design practical challenges, upload lesson notes, and grade submissions.
-                  </p>
-                </Card>
-
-                <Card
-                  onClick={() => setActiveView("company_courses")}
-                  className="p-5 border border-border/80 rounded-2xl hover:border-primary/60 hover:shadow-md cursor-pointer transition-all bg-card"
-                >
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center mb-3">
-                    <BookOpen className="h-5 w-5" />
-                  </div>
-                  <h3 className="font-bold text-sm text-foreground">Manage Course Sessions</h3>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Add new video modules, set KES pricing, and publish curriculum to students.
-                  </p>
-                </Card>
-              </div>
-
-              {/* Enrolled Students Component */}
-              <CompanyLearnersManager
-                institutionId={selectedCompany?.id || data.memberships[0]?.institution_id}
-                companyName={selectedCompany?.name || "Your Company"}
-              />
-            </div>
-            )
-          )}
-
-          {/* VIEW: Learners & Users Directory */}
           {activeView === "company_learners" && (
             userRole === "super_admin" ? (
               <SuperAdminConsole initialTab="users" />
@@ -537,6 +456,33 @@ function Dashboard() {
                 companyName={selectedCompany?.name || "Your Company"}
               />
             )
+          )}
+
+          {/* VIEW: Company Overview */}
+          {activeView === "company_overview" && (
+            userRole === "super_admin" ? (
+              <SuperAdminConsole initialTab="companies" />
+            ) : (
+              <CompanyAdminDashboard
+                displayName={data.profile.display_name}
+                company={selectedCompany}
+                onNavigateToView={setActiveView}
+                onNavigateToMessages={() => setActiveView("messages")}
+              />
+            )
+          )}
+
+          {/* VIEW: Super Admin Direct Tab Shortcuts */}
+          {activeView === "companies" && (
+            <SuperAdminConsole initialTab="companies" />
+          )}
+
+          {activeView === "users" && (
+            <SuperAdminConsole initialTab="users" />
+          )}
+
+          {activeView === "courses" && (
+            <SuperAdminConsole initialTab="courses" />
           )}
 
           {/* VIEW: Course Sessions Manager (Company Studio) */}

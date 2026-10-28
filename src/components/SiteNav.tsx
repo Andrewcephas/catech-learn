@@ -32,16 +32,18 @@ export function SiteNav() {
         <Link
           to="/"
           aria-label="CATECH Learn home"
-          className="flex items-center gap-3 font-display text-lg font-bold"
+          className="flex items-center gap-3 font-display text-base font-bold"
         >
-          <span className="relative block h-14 w-28 overflow-hidden">
+          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 border border-primary/20 shadow-xs">
             <img
               src={logoImg}
               alt="CATECH"
-              className="h-8 w-8 object-contain"
+              className="h-6 w-6 object-contain"
             />
+          </div>
+          <span className="text-foreground tracking-tight">
+            CATECH <span className="text-primary font-black">Learn</span>
           </span>
-          <span className="border-l border-border pl-3 text-primary">Learn</span>
         </Link>
         <nav className="flex flex-wrap items-center gap-3 text-sm font-medium sm:gap-5">
           {!loading &&

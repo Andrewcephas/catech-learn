@@ -283,3 +283,131 @@ export const verifyCertificateFn = createServerFn({ method: "GET" })
       status: certRow.status as "active" | "revoked",
     };
   });
+
+export interface AssignmentSubmissionItem {
+  id: string;
+  assignment_id: string;
+  assignment_title?: string;
+  user_id: string;
+  student_name: string;
+  submission_text: string;
+  file_url: string | null;
+  submitted_at: string;
+  grade: number | null;
+  feedback: string | null;
+  graded_at: string | null;
+}
+
+export const listAssignmentSubmissionsFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z
+      .object({
+        assignment_id: z.string().uuid().optional(),
+        institution_id: z.string().uuid().optional(),
+      })
+      .optional()
+      .parse(input) || {},
+  )
+  .handler(async ({ data, context }): Promise<AssignmentSubmissionItem[]> => {
+    try {
+      let query = context.supabase
+        .from("assignment_submissions" as never)
+        .select(
+          "id, assignment_id, user_id, submission_text, file_url, submitted_at, grade, feedback, graded_at, profiles(display_name), assignments(title)" as never,
+        )
+        .order("submitted_at" as never, { ascending: false });
+
+      if (data?.assignment_id) {
+        query = query.eq("assignment_id" as never, data.assignment_id);
+      }
+
+      const { data: rows, error } = await query;
+      if (error || !rows) return [];
+
+      interface SubRow {
+        id: string;
+        assignment_id: string;
+        user_id: string;
+        submission_text: string | null;
+        file_url: string | null;
+        submitted_at: string;
+        grade: number | null;
+        feedback: string | null;
+        graded_at: string | null;
+        profiles: { display_name?: string } | null;
+        assignments: { title?: string } | null;
+      }
+
+      return (rows as unknown as SubRow[]).map((r) => ({
+        id: r.id,
+        assignment_id: r.assignment_id,
+        assignment_title: r.assignments?.title || "Course Assignment",
+        user_id: r.user_id,
+        student_name: r.profiles?.display_name || "Enrolled Student",
+        submission_text: r.submission_text || "",
+        file_url: r.file_url,
+        submitted_at: r.submitted_at,
+        grade: r.grade,
+        feedback: r.feedback,
+        graded_at: r.graded_at,
+      }));
+    } catch {
+      return [];
+    }
+  });
+
+export interface StudentSubmissionItem {
+  id: string;
+  assignment_id: string;
+  assignment_title: string;
+  submission_text: string;
+  file_url: string | null;
+  submitted_at: string;
+  grade: number | null;
+  feedback: string | null;
+  graded_at: string | null;
+}
+
+export const listStudentSubmissionsFn = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }): Promise<StudentSubmissionItem[]> => {
+    try {
+      const { data: rows, error } = await context.supabase
+        .from("assignment_submissions" as never)
+        .select(
+          "id, assignment_id, submission_text, file_url, submitted_at, grade, feedback, graded_at, assignments(title)" as never,
+        )
+        .eq("user_id" as never, context.userId)
+        .order("submitted_at" as never, { ascending: false });
+
+      if (error || !rows) return [];
+
+      interface MySubRow {
+        id: string;
+        assignment_id: string;
+        submission_text: string | null;
+        file_url: string | null;
+        submitted_at: string;
+        grade: number | null;
+        feedback: string | null;
+        graded_at: string | null;
+        assignments: { title?: string } | null;
+      }
+
+      return (rows as unknown as MySubRow[]).map((r) => ({
+        id: r.id,
+        assignment_id: r.assignment_id,
+        assignment_title: r.assignments?.title || "Module Task",
+        submission_text: r.submission_text || "",
+        file_url: r.file_url,
+        submitted_at: r.submitted_at,
+        grade: r.grade,
+        feedback: r.feedback,
+        graded_at: r.graded_at,
+      }));
+    } catch {
+      return [];
+    }
+  });
+

@@ -724,3 +724,43 @@ export const updateCompanyProfileFn = createServerFn({ method: "POST" })
 
     return { success: true, message: "Company profile updated successfully." };
   });
+
+export const associateStudentWithCompanyFn = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: unknown) =>
+    z.object({ institution_id: z.string().uuid() }).parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    // 1. Update user profile institution_id
+    await context.supabase
+      .from("profiles")
+      .update({ institution_id: data.institution_id })
+      .eq("id", context.userId);
+
+    // 2. Add institution_membership as student
+    try {
+      const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+      await supabaseAdmin.from("institution_memberships").upsert(
+        {
+          institution_id: data.institution_id,
+          user_id: context.userId,
+          role: "student",
+          active: true,
+        },
+        { onConflict: "institution_id,user_id" },
+      );
+    } catch {
+      await context.supabase.from("institution_memberships").upsert(
+        {
+          institution_id: data.institution_id,
+          user_id: context.userId,
+          role: "student",
+          active: true,
+        },
+        { onConflict: "institution_id,user_id" },
+      );
+    }
+
+    return { success: true };
+  });
+
