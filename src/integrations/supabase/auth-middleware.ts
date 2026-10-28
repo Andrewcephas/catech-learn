@@ -85,20 +85,23 @@ export const requireSupabaseAuth = createMiddleware({ type: "function" }).server
       },
     });
 
-    const { data, error } = await supabase.auth.getClaims(token);
-    if (error || !data?.claims) {
+    // Use getUser() instead of getClaims() for reliable serverless validation.
+    // getClaims() relies on JWKS fetching/caching which can fail on cold starts.
+    // getUser() validates the token directly with the Supabase Auth server.
+    const { data: userData, error: userError } = await supabase.auth.getUser(token);
+    if (userError || !userData?.user) {
+      console.error(
+        "[Supabase Auth Middleware] Token validation failed:",
+        userError?.message ?? "No user returned",
+      );
       throw new Error("Unauthorized: Invalid token");
-    }
-
-    if (!data.claims.sub) {
-      throw new Error("Unauthorized: No user ID found in token");
     }
 
     return next({
       context: {
         supabase,
-        userId: data.claims.sub,
-        claims: data.claims,
+        userId: userData.user.id,
+        claims: { sub: userData.user.id, email: userData.user.email },
       },
     });
   },

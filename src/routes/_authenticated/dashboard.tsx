@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
 import {
@@ -59,7 +59,15 @@ import { IssueReporter } from "@/components/dashboard/IssueReporter";
 import { NotificationBell } from "@/components/dashboard/NotificationBell";
 import { listUserPayments } from "@/lib/payment.functions";
 
-const accountOptions = queryOptions({ queryKey: ["account"], queryFn: () => getAccount() });
+const accountOptions = queryOptions({
+  queryKey: ["account"],
+  queryFn: () => getAccount(),
+  retry: (failureCount, error) => {
+    // Don't retry auth failures — the token is invalid, not a transient error
+    if (error instanceof Error && error.message.includes("Unauthorized")) return false;
+    return failureCount < 2;
+  },
+});
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -75,7 +83,19 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
       { name: "twitter:card", content: "summary" },
     ],
   }),
-  loader: ({ context }) => context.queryClient.ensureQueryData(accountOptions),
+  loader: async ({ context }) => {
+    try {
+      return await context.queryClient.ensureQueryData(accountOptions);
+    } catch (err) {
+      // If the server function throws "Unauthorized" (expired/invalid token),
+      // redirect to /auth instead of showing a deserialized error on the client.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("Unauthorized")) {
+        throw redirect({ to: "/auth" });
+      }
+      throw err;
+    }
+  },
   component: Dashboard,
 });
 
